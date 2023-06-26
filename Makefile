@@ -5,7 +5,7 @@ PKG_VERSION:=0.9
 PKG_RELEASE:=1
 
 LUCI_TITLE:=LuCI Support for DAED
-LUCI_DEPENDS:=+daed
+LUCI_DEPENDS:=+daed +daed-geoip +daed-geosite
 LUCI_PKGARCH:=all
 
 define Package/$(PKG_NAME)/conffiles

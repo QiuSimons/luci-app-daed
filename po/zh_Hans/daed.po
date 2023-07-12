@@ -27,3 +27,9 @@ msgstr "设置监听地址"
 
 msgid "Collecting data..."
 msgstr "收集数据..."
+
+msgid "DAED is not running"
+msgstr "DAED 未运行"
+
+msgid "Please start the DAED service first and try again"
+msgstr "请先启动 DAED 服务后重试"

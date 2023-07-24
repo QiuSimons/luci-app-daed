@@ -10,6 +10,15 @@ msgstr "DAE是一个基于eBPF的Linux高性能透明代理解决方案，而DAE
 msgid "Base Setting"
 msgstr "基本设置"
 
+msgid "Dashboard"
+msgstr "仪表板"
+
+msgid "Logs"
+msgstr "日志"
+
+msgid "Clear logs"
+msgstr "清空日志"
+
 msgid "Running state"
 msgstr "运行状态"
 
@@ -21,6 +30,12 @@ msgstr "DAED服务未启动"
 
 msgid "DAED Status"
 msgstr "DAED服务状态"
+
+msgid "Logfile retention count"
+msgstr "日志文件保留数量"
+
+msgid "Logfile Max Size (MB)"
+msgstr "日志文件大小（MB）"
 
 msgid "Set the DAED listen address"
 msgstr "设置监听地址"

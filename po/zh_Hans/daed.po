@@ -19,17 +19,14 @@ msgstr "日志"
 msgid "Clear logs"
 msgstr "清空日志"
 
-msgid "Running state"
-msgstr "运行状态"
+msgid "RUNNING"
+msgstr "运行中"
 
-msgid "The DAED service is running."
-msgstr "DAED服务已启动"
+msgid "NOT RUNNING"
+msgstr "未运行"
 
-msgid "The DAED service is not running."
-msgstr "DAED服务未启动"
-
-msgid "DAED Status"
-msgstr "DAED服务状态"
+msgid "Collecting data..."
+msgstr "收集数据..."
 
 msgid "Logfile retention count"
 msgstr "日志文件保留数量"
@@ -39,9 +36,6 @@ msgstr "日志文件大小（MB）"
 
 msgid "Set the DAED listen address"
 msgstr "设置监听地址"
-
-msgid "Collecting data..."
-msgstr "收集数据..."
 
 msgid "DAED is not running"
 msgstr "DAED 未运行"

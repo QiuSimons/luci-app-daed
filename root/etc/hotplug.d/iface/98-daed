@@ -1,0 +1,16 @@
+#!/bin/sh
+[ "${ACTION}" = "ifup" ] && {
+
+    # 设置文件锁
+    LOCK_FILE="/tmp/lock/daed_hotplug_lock"
+
+    # 尝试获取文件锁，如果获取不到则退出
+    if mkdir "$LOCK_FILE" 2>/dev/null; then
+        trap 'rmdir "$LOCK_FILE"' EXIT
+        # 等待x秒
+        sleep 10
+        /etc/init.d/daed restart
+    else
+        exit 1
+    fi
+}

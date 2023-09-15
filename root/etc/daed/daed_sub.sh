@@ -13,8 +13,11 @@ login() {
 }
 
 update_subscription() {
-	SUBSCRIPTION_ID=$(curl -s -X POST -H "Authorization: $TOKEN" -d '{"query": "query Subscriptions {\n subscriptions {\nid\ntag\nstatus\nlink\ninfo\nupdatedAt\nnodes {\nedges {\nid\nname\nprotocol\nlink\n}\n}\n}\n}", "operationName": "Subscriptions"}' $GRAPHQL_URL | grep -o 'id":"[^"]*' | grep -o '[^"]*$' | head -1)
-	curl -X POST -H "Authorization: $TOKEN" -d '{"query":"mutation UpdateSubscription($id: ID!) {\n  updateSubscription(id: $id) {\n    id\n  }\n}","variables":{"id":"'"$SUBSCRIPTION_ID"'"},"operationName":"UpdateSubscription"}' $GRAPHQL_URL
+	SUBSCRIPTION_ID_LIST=$(curl -s -X POST -H "Authorization: $TOKEN" -d '{"query": "query Subscriptions {\n subscriptions {\nid\ntag\nstatus\nlink\ninfo\nupdatedAt\nnodes {\nedges {\nid\nname\nprotocol\nlink\n}\n}\n}\n}", "operationName": "Subscriptions"}' $GRAPHQL_URL | grep -o '"id":"[^"]*","tag"' | grep -o 'id":"[^"]*' | grep -o '[^"]*$')
+	echo "$SUBSCRIPTION_ID_LIST" | while read -r id; do
+	curl -X POST -H "Authorization: $TOKEN" -d '{"query":"mutation UpdateSubscription($id: ID!) {\n  updateSubscription(id: $id) {\n    id\n  }\n}","variables":{"id":"'"$id"'"},"operationName":"UpdateSubscription"}' $GRAPHQL_URL
+	done
+	curl -X POST -H "Authorization: $TOKEN" -d '{"query":"mutation Run($dry: Boolean!) {\n  run(dry: $dry)\n}","variables":{"dry":false},"operationName":"Run"}' $GRAPHQL_URL
 }
 
 login && update_subscription

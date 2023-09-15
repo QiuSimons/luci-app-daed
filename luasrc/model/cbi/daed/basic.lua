@@ -18,10 +18,12 @@ enable.rmempty = false
 
 o = s:option(Value, "daed_username", translate("Username"))
 o.default = Username
+o.password = true
 o:depends('subscribe_auto_update', '1')
 
 o = s:option(Value, "daed_password", translate("Password"))
 o.default = Password
+o.password = true
 o:depends('subscribe_auto_update', '1')
 
 o = s:option(ListValue, "subscribe_update_week_time", translate("Update Cycle"))

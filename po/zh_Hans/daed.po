@@ -42,3 +42,18 @@ msgstr "DAED 未运行"
 
 msgid "Please start the DAED service first and try again"
 msgstr "请先启动 DAED 服务后重试"
+
+msgid "Enable Auto Subscribe Update"
+msgstr "启用订阅自动更新"
+
+msgid "Update Cycle"
+msgstr "更新周期"
+
+msgid "Update Time (Every Day)"
+msgstr "更新时间（每天）"
+
+msgid "Username"
+msgstr "用户名"
+
+msgid "Password"
+msgstr "密码"

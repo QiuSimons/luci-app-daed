@@ -1,7 +1,6 @@
 #!/bin/sh /etc/rc.common
 # Copyright (C) 2023 Tianling Shen <cnsztl@immortalwrt.org>
 
-USE_PROCD=1
 START=99
 
 CONF="daed"
@@ -11,32 +10,32 @@ CRON_FILE="/etc/crontabs/root"
 
 setcron() {
   touch $CRON_FILE
-  sed -i '/daed_sub.sh/d' $CRON_FILE 2> /dev/null
-  [ "$(uci -q get daed.config.subscribe_auto_update)" -eq 1 ] && echo "0 $(uci -q get daed.config.subscribe_update_day_time) * * $(uci -q get daed.config.subscribe_update_week_time) /etc/daed/daed_sub.sh" >> $CRON_FILE
+  sed -i '/daed_sub.sh/d' $CRON_FILE 2>/dev/null
+  [ "$(uci -q get daed.config.subscribe_auto_update)" -eq 1 ] && echo "0 $(uci -q get daed.config.subscribe_update_day_time) * * $(uci -q get daed.config.subscribe_update_week_time) /etc/daed/daed_sub.sh" >>$CRON_FILE
   crontab $CRON_FILE
 }
 
 delcron() {
-  sed -i '/daed_sub.sh/d' $CRON_FILE 2> /dev/null
+  sed -i '/daed_sub.sh/d' $CRON_FILE 2>/dev/null
   crontab $CRON_FILE
 }
 
 start_service() {
-	config_load "$CONF"
+  config_load "$CONF"
 
-	local enabled
-	config_get_bool enabled "config" "enabled" "0"
-	if [ "$enabled" -eq 0 ]; then
+  local enabled
+  config_get_bool enabled "config" "enabled" "0"
+  if [ "$enabled" -eq 0 ]; then
     delcron
     return 1
   fi
-	setcron
+  setcron
 }
 
 stop_service() {
-	delcron
+  delcron
 }
 
 service_triggers() {
-	procd_add_reload_trigger "$CONF"
+  procd_add_reload_trigger "$CONF"
 }

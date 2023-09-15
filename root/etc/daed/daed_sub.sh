@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/bin/sh
 
 USERNAME=$(uci -q get daed.config.daed_username)
 PASSWORD=$(uci -q get daed.config.daed_password)

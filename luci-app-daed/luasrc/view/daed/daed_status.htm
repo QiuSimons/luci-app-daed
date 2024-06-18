@@ -1,0 +1,24 @@
+<script type="text/javascript">//<![CDATA[
+	XHR.poll(3, '<%=url([[admin]], [[services]], [[daed_status]])%>', null,
+		function(x, data) {
+			var tb = document.getElementById('daed_status');
+			if (data && tb)
+			{
+				if (data.running)
+				{
+					tb.innerHTML = '<em><b style=\"color:green\"><%:DAED%> <%:RUNNING%></b></em>';
+				}
+				else
+				{
+					tb.innerHTML = '<em><b style=\"color:red\"><%:DAED%> <%:NOT RUNNING%></b></em>';
+				}
+			}
+		}
+	);
+//]]></script>
+<style>.mar-10 {margin-left: 50px; margin-right: 10px;}</style>
+<fieldset class="cbi-section">
+	<p id="daed_status">
+		<em><%:Collecting data...%></em>
+	</p>
+</fieldset>

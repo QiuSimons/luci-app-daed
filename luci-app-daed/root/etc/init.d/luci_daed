@@ -2,7 +2,7 @@
 # Copyright (C) 2023 Tianling Shen <cnsztl@immortalwrt.org>
 
 USE_PROCD=0
-START=99
+START=98
 
 CONF="daed"
 PROG="/usr/bin/daed"

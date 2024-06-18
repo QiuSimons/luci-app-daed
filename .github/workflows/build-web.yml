@@ -1,0 +1,95 @@
+name: Build Web
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 16 * * *
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@main
+        with:
+          node-version: 18
+
+      - name: Build System Setup
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools jq
+          sudo apt-get install -y dos2unix
+          sudo npm install -g pnpm
+          sudo npm i taze -g
+
+      - name: Update Makefile
+        run: |
+          chmod 755 ./daed/files/daed.init ./luci-app-daed/root/etc/init.d/luci_daed ./luci-app-daed/root/etc/daed/daed_sub.sh
+          find . -type f -exec dos2unix {} \; -print
+          latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
+          latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
+          latest_commit_full="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha')"
+          timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
+          weburl=$(curl -s https://api.github.com/repos/daeuniverse/daed/releases | grep -oP '"browser_download_url": "\K[^"]*web.zip' | head -n 1 | sed 's@/[^/]*$@@')
+          formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
+          sed -i '/PKG_VERSION:/d' ./daed/Makefile
+          sed -i "7 a PKG_VERSION:=$latest_commit" ./daed/Makefile
+          sed -i '/DAED_VERSION:/d' ./daed/Makefile
+          sed -i "8 a DAED_VERSION:=daed-$latest_commit" ./daed/Makefile
+          sed -i '/CORE_VERSION:/d' ./daed/Makefile
+          sed -i "9 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
+          sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
+          sed -i "14 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
+          sed -i '/daed\/releases/d' ./daed/Makefile
+          sed -i "70 a\        URL:=$weburl" ./daed/Makefile
+          echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
+
+      - name: Commit file
+        run: |
+          rm -rf build
+          git config --global user.email simonsqiu@foxmail.com
+          git config --global user.name SimonsQiu
+          git add .
+          git commit -m "Update `date +%Y/%m/%d\ %H:%M:%S\ %Z`" -a
+        continue-on-error: true
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{secrets.ACTIONS_DEPLOY_KEY}}
+          branch: master
+        continue-on-error: true
+
+      - name: Cleanup Workflow Logs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
+          repository: ${{ github.repository }}
+          retain_days: 1
+
+      - name: Delete Older Releases
+        uses: dev-drprasad/delete-older-releases@master
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{secrets.ACTIONS_DEPLOY_KEY}}
+
+      - name: Cleanup Old Action Artifacts
+        uses: c-hive/gha-remove-artifacts@master
+        with:
+          age: '3 days'
+          skip-recent: 3
+
+      - name: Cleanup Workflow Logs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
+          repository: ${{ github.repository }}
+          retain_days: 3

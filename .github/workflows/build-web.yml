@@ -9,9 +9,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@main
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-node@main
         with:
@@ -57,6 +58,7 @@ jobs:
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{secrets.ACTIONS_DEPLOY_KEY}}
+          branch: master
         continue-on-error: true
 
       - name: Cleanup Workflow Logs

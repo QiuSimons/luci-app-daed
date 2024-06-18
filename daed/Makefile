@@ -68,6 +68,7 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
+WEB_URL:=$(shell curl -s https://api.github.com/repos/daeuniverse/daed/releases | grep -oP '"browser_download_url": "\K[^"]*web.zip' | head -n 1)
 define Build/Prepare
 	$(call Build/Prepare/Default)
 
@@ -85,9 +86,9 @@ define Build/Prepare
 		go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \
-		curl -L -o $(DL_DIR)/web.zip $(curl -s https://api.github.com/repos/daeuniverse/daed/releases | grep -oP '"browser_download_url": "\K[^"]*web.zip' | head -n 1) ; \
+		curl -L -o $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/web.zip $(WEB_URL) ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender ; \
-		unzip -q -d $(PKG_BUILD_DIR)/webrender/ $(DL_DIR)/web.zip ; \
+		unzip -q -d $(PKG_BUILD_DIR)/webrender/ $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/web.zip ; \
 		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff"  ! -name "*.woff2" -exec sh -c '\
 			gzip -9 -k "{}"; \
 			if [ "$$$$(stat -c %s "{}")" -lt "$$$$(stat -c %s "{}.gz")" ]; then \

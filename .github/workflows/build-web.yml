@@ -56,13 +56,13 @@ jobs:
       - name: Push changes
         uses: ad-m/github-push-action@master
         with:
-          github_token: ${{secrets.GITHUB_TOKEN}}
+          github_token: ${{secrets.ACTIONS_DEPLOY_KEY}}
         continue-on-error: true
 
       - name: Cleanup Workflow Logs
         uses: Mattraks/delete-workflow-runs@main
         with:
-          token: ${{secrets.GITHUB_TOKEN}}
+          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           repository: ${{ github.repository }}
           retain_days: 1
 
@@ -72,7 +72,7 @@ jobs:
           keep_latest: 3
           delete_tags: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{secrets.ACTIONS_DEPLOY_KEY}}
 
       - name: Cleanup Old Action Artifacts
         uses: c-hive/gha-remove-artifacts@master
@@ -83,6 +83,6 @@ jobs:
       - name: Cleanup Workflow Logs
         uses: Mattraks/delete-workflow-runs@main
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           repository: ${{ github.repository }}
           retain_days: 3

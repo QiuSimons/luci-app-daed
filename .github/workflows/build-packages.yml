@@ -59,6 +59,6 @@ jobs:
           allowUpdates: true
           tag: daed-${{ env.version }}
           commit: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           replacesArtifacts: true
           artifacts: "bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"

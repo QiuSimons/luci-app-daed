@@ -47,7 +47,7 @@ jobs:
           sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
           sed -i "14 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
           sed -i '/daed\/releases/d' ./daed/Makefile
-          sed -i "69 a\        URL:=$weburl" ./daed/Makefile
+          sed -i "70 a\        URL:=$weburl" ./daed/Makefile
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Commit file

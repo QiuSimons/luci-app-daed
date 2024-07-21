@@ -72,6 +72,7 @@ jobs:
           token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           repository: ${{ github.repository }}
           retain_days: 1
+        continue-on-error: true
 
       - name: Delete Older Releases
         uses: dev-drprasad/delete-older-releases@master
@@ -80,12 +81,14 @@ jobs:
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{secrets.ACTIONS_DEPLOY_KEY}}
+        continue-on-error: true
 
       - name: Cleanup Old Action Artifacts
         uses: c-hive/gha-remove-artifacts@master
         with:
           age: '3 days'
           skip-recent: 3
+        continue-on-error: true
 
       - name: Cleanup Workflow Logs
         uses: Mattraks/delete-workflow-runs@main
@@ -93,3 +96,4 @@ jobs:
           token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           repository: ${{ github.repository }}
           retain_days: 3
+        continue-on-error: true

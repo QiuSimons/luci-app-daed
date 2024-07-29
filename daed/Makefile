@@ -5,14 +5,14 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=740cf42
-DAED_VERSION:=daed-740cf42
+PKG_VERSION:=991f627
+DAED_VERSION:=daed-991f627
 CORE_VERSION:=core-4717fa2
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_VERSION:=740cf4298d044720afd7647b69f5e17ee7d89f87
+PKG_SOURCE_VERSION:=991f627644642c6bdbcbef548474d27a9b679627
 PKG_SOURCE_URL:=https://github.com/daeuniverse/daed.git
 PKG_MIRROR_HASH:=skip
 
@@ -68,7 +68,7 @@ endef
 
 WEB_FILE:=$(PKG_NAME)-web-$(PKG_VERSION).zip
 define Download/daed-web
-        URL:=https://github.com/daeuniverse/daed/releases/download/v0.7.0rc1.1
+        URL:=https://github.com/daeuniverse/daed/releases/download/v0.7.0
 	URL_FILE:=web.zip
 	FILE:=$(WEB_FILE)
 	HASH:=skip

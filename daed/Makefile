@@ -81,7 +81,6 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core ; \
 		rm -rf $(PKG_BUILD_DIR)/dae-core/control/kern/headers && git clone https://github.com/daeuniverse/dae_bpf_headers $(PKG_BUILD_DIR)/dae-core/control/kern/headers ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/9f04adf.patch | patch -Rp1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/commit/c3c06c4.patch | patch -Rp1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/commit/768595b.patch | patch -Rp1 ; \
 		sed -i -e 's!default:"30s"!default:"600s"!g' -e 's!default:"HEAD"!default:"CONNECT"!g' -e 's!default:"dns.google.com:53,8.8.8.8,2001:4860:4860::8888"!default:"one.one.one.one:53,1.0.0.1,2606:4700:4700::1111"!g' -e 's!default:"http://cp.cloudflare.com,1.1.1.1,2606:4700:4700::1111"!default:"http://cp.cloudflare.com,1.0.0.1,2606:4700:4700::1111"!g' config/config.go ; \
@@ -89,7 +88,8 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca0296173d36746335efed1923ff08c1300f7a61.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/pull/157.patch | patch -p1 ; \
 		go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \

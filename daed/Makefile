@@ -7,7 +7,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=daed
 PKG_VERSION:=b44c472
 DAED_VERSION:=daed-b44c472
-CORE_VERSION:=core-78f4e34
+CORE_VERSION:=core-d3ab0b2
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz

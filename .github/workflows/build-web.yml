@@ -37,6 +37,7 @@ jobs:
           dos2unix ./luci-app-daed/root/etc/daed/daed_sub.sh
           dos2unix ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
           latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
+          latest_wing_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)"
           latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
           latest_commit_full="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha')"
           timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
@@ -46,12 +47,14 @@ jobs:
           sed -i "7 a PKG_VERSION:=$latest_commit" ./daed/Makefile
           sed -i '/DAED_VERSION:/d' ./daed/Makefile
           sed -i "8 a DAED_VERSION:=daed-$latest_commit" ./daed/Makefile
+          sed -i '/WING_VERSION:=/d' ./daed/Makefile
+          sed -i "9 a WING_VERSION:=wing-$latest_wing_commit" ./daed/Makefile
           sed -i '/CORE_VERSION:=/d' ./daed/Makefile
-          sed -i "9 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
+          sed -i "10 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
           sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
-          sed -i "14 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
+          sed -i "15 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
           sed -i '/daed\/releases/d' ./daed/Makefile
-          sed -i "70 a\        URL:=$weburl" ./daed/Makefile
+          sed -i "71 a\        URL:=$weburl" ./daed/Makefile
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Commit file

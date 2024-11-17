@@ -14,7 +14,7 @@ jobs:
           - i386_pentium4
           - x86_64
         sdk:
-          - openwrt-22.03
+          - openwrt-24.10
 
     steps:
       - uses: actions/checkout@main
@@ -39,7 +39,7 @@ jobs:
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Building packages
-        uses: sbwml/openwrt-gh-action-sdk@go1.22
+        uses: sbwml/openwrt-gh-action-sdk@go1.23
         env:
           ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
           FEEDNAME: packages_ci

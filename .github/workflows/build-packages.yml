@@ -32,7 +32,9 @@ jobs:
           sudo swapoff -a
           sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq install clang-15 llvm-15
+          sudo -E apt-get -qq install clang-15 llvm-15 npm
+          sudo npm install -g pnpm
+          sudo npm i taze -g
           latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
           timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
           formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")

@@ -67,14 +67,6 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
-WEB_FILE:=$(PKG_NAME)-web-$(PKG_VERSION).zip
-define Download/daed-web
-        URL:=https://github.com/daeuniverse/daed/releases/download/v0.8.0
-	URL_FILE:=web.zip
-	FILE:=$(WEB_FILE)
-	HASH:=skip
-endef
-
 define Build/Prepare
 	( \
 		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
@@ -88,8 +80,12 @@ define Build/Prepare
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \
-		mkdir -p $(PKG_BUILD_DIR)/webrender ; \
-		unzip -q -d $(PKG_BUILD_DIR)/webrender/ $(DL_DIR)/$(WEB_FILE) ; \
+		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
+		pnpm install ; \
+        pnpm build ; \
+		popd ; \
+		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
+		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
 		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff"  ! -name "*.woff2" -exec sh -c '\
 			gzip -9 -k "{}"; \
 			if [ "$$$$(stat -c %s {})" -lt "$$$$(stat -c %s {}.gz)" ]; then \
@@ -142,6 +138,5 @@ define Package/daed/install
 	$(INSTALL_BIN) $(CURDIR)/files/daed.init $(1)/etc/init.d/daed
 endef
 
-$(eval $(call Download,daed-web))
 $(eval $(call GoBinPackage,daed))
 $(eval $(call BuildPackage,daed))

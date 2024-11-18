@@ -36,9 +36,11 @@ jobs:
           sudo npm install -g pnpm
           sudo npm i taze -g
           latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
+          latest_wing_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)"
+          latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
           timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
           formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
-          echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
+          echo "version='$latest_commit'-wing_'$latest_wing_commit'-core_'$latest_core_commit'" >> "$GITHUB_ENV"
 
       - name: Building packages
         uses: sbwml/openwrt-gh-action-sdk@go1.23
@@ -57,9 +59,9 @@ jobs:
       - name: Upload packages
         uses: ncipollo/release-action@v1
         with:
-          name: daed-${{ env.version }}
+          name: daed_${{ env.version }}
           allowUpdates: true
-          tag: daed-${{ env.version }}
+          tag: daed_${{ env.version }}
           commit: master
           token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           replacesArtifacts: true

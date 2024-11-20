@@ -40,7 +40,7 @@ jobs:
           latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
           timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
           formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
-          echo "version='$latest_commit'-wing_'$latest_wing_commit'-core_'$latest_core_commit'" >> "$GITHUB_ENV"
+          echo "version=$latest_commit-wing_$latest_wing_commit-core_$latest_core_commit" >> "$GITHUB_ENV"
 
       - name: Building packages
         uses: sbwml/openwrt-gh-action-sdk@go1.23

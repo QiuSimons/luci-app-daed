@@ -16,14 +16,16 @@
 ```bash
 git clone https://github.com/QiuSimons/luci-app-daed package/dae
 ```
-- get the libcron from here `https://github.com/tindy2013/openwrt-subconverter`
+- get the libcron
+```bash
+mkdir -p Package/libcron && wget -O Package/libcron/Makefile https://raw.githubusercontent.com/immortalwrt/packages/refs/heads/master/libs/libcron/Makefile
+```
 
 ### 2. Install dependencies, refer to https://apt.llvm.org
 
 ```bash
 apt-get update
 apt-get install -y clang-15 llvm-15 npm
-npm install -g pnpm
 ```
 
 ### 3. Change OpenWrt Source (Requirements for DAE to work)

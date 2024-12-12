@@ -12,7 +12,6 @@
 ## Build on OpenWrt official 24.10/SnapShots
 
 ### 1. Get Source
-- luci-app-daed works with `https://github.com/immortalwrt/packages/tree/master/net/daed`
 ```bash
 git clone https://github.com/QiuSimons/luci-app-daed package/dae
 ```

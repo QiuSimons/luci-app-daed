@@ -73,6 +73,8 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout ${WING_VERSION: -7} ; \
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout ${CORE_VERSION: -7} ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
+		wget -qO - https://github.com/daeuniverse/dae/pull/743.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/pull/699.patch | patch -p1 ; \
 		git submodule update --init ; \
 		go mod tidy ; \
 		popd ; \

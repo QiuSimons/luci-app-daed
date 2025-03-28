@@ -84,7 +84,7 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		wget -qO - https://github.com/daeuniverse/daed/commit/7b5f245.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/daed/commit/f7bd602.patch | patch -p1 ; \
 		npm install -g pnpm ; \
 		pnpm install ; \
 		pnpm build ; \

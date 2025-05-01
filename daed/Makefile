@@ -75,7 +75,6 @@ define Build/Prepare
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/782.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \

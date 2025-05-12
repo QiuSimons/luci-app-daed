@@ -74,9 +74,6 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout ${CORE_VERSION: -7} ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init --recursive ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/ecaa214.patch | patch -Rp1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/dce65b4.patch | patch -Rp1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/c14d06a.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/782.patch | patch -p1 ; \
 		go mod tidy ; \

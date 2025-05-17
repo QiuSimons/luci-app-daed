@@ -70,25 +70,24 @@ endef
 define Build/Prepare
 	( \
 		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
+		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout ${WING_VERSION: -7} ; \
+		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout ${CORE_VERSION: -7} ; \
+		pushd $(PKG_BUILD_DIR)/dae-core ; \
+		git submodule update --init ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/c14d06a.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/pull/782.patch | patch -p1 ; \
+		go mod tidy ; \
+		popd ; \
+		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
+		go mod tidy ; \
+		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		git submodule update --init --recursive ; \
 		wget -qO - https://github.com/daeuniverse/daed/commit/f7bd602.patch | patch -p1 ; \
 		npm install -g pnpm ; \
 		pnpm install ; \
 		pnpm build ; \
-		popd ; \
-		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout ${WING_VERSION: -7} ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		go mod tidy ; \
-		git submodule update --init --recursive ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
-		popd ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout ${CORE_VERSION: -7} ; \
-		pushd $(PKG_BUILD_DIR)/dae-core ; \
-		git submodule update --init --recursive ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/c14d06a.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/782.patch | patch -p1 ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
 		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/dist/* $(PKG_BUILD_DIR)/webrender/web ; \

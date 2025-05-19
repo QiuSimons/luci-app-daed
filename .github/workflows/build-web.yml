@@ -53,7 +53,7 @@ jobs:
           sed -i '/CORE_VERSION:=/d' ./daed/Makefile
           sed -i "10 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
           sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
-          sed -i "15 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
+          sed -i "17 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Commit file

@@ -5,10 +5,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.05.12
+PKG_VERSION:=2025.05.23
 DAED_VERSION:=daed-58d0382
 WING_VERSION:=wing-33cbf33
-CORE_VERSION:=core-3cb4eee
+CORE_VERSION:=core-b5f9479
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
 CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
 PKG_RELEASE:=1

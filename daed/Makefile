@@ -83,6 +83,7 @@ define Build/Prepare
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/f6d3a7b.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/commit/83cebf1.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \

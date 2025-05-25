@@ -77,17 +77,13 @@ define Build/Prepare
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/782.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/f6d3a7b.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/83cebf1.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \l
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		wget -qO - https://github.com/daeuniverse/daed/commit/f7bd602.patch | patch -p1 ; \
 		npm install -g pnpm ; \
 		pnpm install ; \
 		pnpm build ; \

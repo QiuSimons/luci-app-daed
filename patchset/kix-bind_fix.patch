@@ -1,0 +1,134 @@
+From 5740b94c734da74557be2a48b2a967bf0ab2eb12 Mon Sep 17 00:00:00 2001
+From: kix <olices@9up.in>
+Date: Wed, 25 Jun 2025 17:58:33 +0800
+Subject: [PATCH] fix: resolve DNS cache UDP port binding race condition
+
+- Improve AnyfromPool concurrent control with exponential backoff retry
+- Add timeout protection to prevent infinite waiting in high concurrency
+- Enhance error handling in sendPkt to prevent crashes on binding failures
+- Replace fatal errors with warning logs for DNS response sending failures
+- Maintain service availability when UDP port conflicts occur
+
+Fixes the occasional crashes with 'bind: address already in use' errors
+that occurred during high concurrent DNS requests on port 53.
+---
+ control/anyfrom_pool.go | 19 ++++++++++++-------
+ control/dns_control.go  | 24 ++++++++++++++++++++----
+ control/udp.go          |  7 ++++++-
+ 3 files changed, 38 insertions(+), 12 deletions(-)
+
+diff --git a/control/anyfrom_pool.go b/control/anyfrom_pool.go
+index 668fcab02..c559c0faa 100644
+--- a/control/anyfrom_pool.go
++++ b/control/anyfrom_pool.go
+@@ -8,6 +8,7 @@ package control
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"math"
+ 	"net"
+ 	"net/netip"
+@@ -177,17 +178,21 @@ func (p *AnyfromPool) GetOrCreate(lAddr string, ttl time.Duration) (conn *Anyfro
+ 		return anyfrom, false, nil
+ 	}
+ 	
+-	// 使用双重检查锁定模式避免重复创建
++	// 使用更精确的双重检查锁定模式避免重复创建
+ 	// 创建临时key用于创建锁
+ 	createKey := lAddr + "_creating"
+ 	if _, loaded := p.pool.LoadOrStore(createKey, struct{}{}); loaded {
+-		// 有其他goroutine在创建，等待并重试
+-		time.Sleep(time.Microsecond * 100)
+-		if af, ok := p.pool.Load(lAddr); ok {
+-			anyfrom := af.(*Anyfrom)
+-			anyfrom.RefreshTtl()
+-			return anyfrom, false, nil
++		// 有其他goroutine在创建，使用退避重试机制
++		for i := 0; i < 10; i++ {
++			time.Sleep(time.Millisecond * time.Duration(i+1)) // 递增退避
++			if af, ok := p.pool.Load(lAddr); ok {
++				anyfrom := af.(*Anyfrom)
++				anyfrom.RefreshTtl()
++				return anyfrom, false, nil
++			}
+ 		}
++		// 如果等待后仍未创建成功，返回错误而不是继续创建
++		return nil, false, fmt.Errorf("timeout waiting for connection creation on %s", lAddr)
+ 	}
+ 	
+ 	defer p.pool.Delete(createKey)
+diff --git a/control/dns_control.go b/control/dns_control.go
+index 069dd09b6..e66f83086 100644
+--- a/control/dns_control.go
++++ b/control/dns_control.go
+@@ -445,7 +445,11 @@ func (c *DnsController) handle_(
+ 		if resp := c.LookupDnsRespCache_(dnsMessage, cacheKey, false); resp != nil {
+ 			if needResp {
+ 				if err = sendPkt(c.log, resp, req.realDst, req.realSrc, req.src, req.lConn); err != nil {
+-					return fmt.Errorf("failed to write cached DNS resp: %w", err)
++					c.log.WithError(err).WithFields(logrus.Fields{
++						"from": req.realSrc.String(),
++						"to":   req.realDst.String(),
++					}).Warn("failed to write cached DNS resp")
++					// 不返回错误，继续处理避免程序崩溃
+ 				}
+ 			}
+ 			return nil
+@@ -459,7 +463,11 @@ func (c *DnsController) handle_(
+ 		// Send cache to client directly.
+ 		if needResp {
+ 			if err = sendPkt(c.log, resp, req.realDst, req.realSrc, req.src, req.lConn); err != nil {
+-				return fmt.Errorf("failed to write cached DNS resp: %w", err)
++				c.log.WithError(err).WithFields(logrus.Fields{
++					"from": req.realSrc.String(),
++					"to":   req.realDst.String(),
++				}).Warn("failed to write cached DNS resp")
++				// 不返回错误，继续处理避免程序崩溃
+ 			}
+ 		}
+ 		if c.log.IsLevelEnabled(logrus.DebugLevel) && len(dnsMessage.Question) > 0 {
+@@ -508,7 +516,11 @@ func (c *DnsController) sendReject_(dnsMessage *dnsmessage.Msg, req *udpRequest)
+ 		return fmt.Errorf("pack DNS packet: %w", err)
+ 	}
+ 	if err = sendPkt(c.log, data, req.realDst, req.realSrc, req.src, req.lConn); err != nil {
+-		return err
++		c.log.WithError(err).WithFields(logrus.Fields{
++			"from": req.realSrc.String(),
++			"to":   req.realDst.String(),
++		}).Warn("failed to send DNS reject response")
++		// 不返回错误，避免程序崩溃
+ 	}
+ 	return nil
+ }
+@@ -646,7 +658,11 @@ func (c *DnsController) dialSend(invokingDepth int, req *udpRequest, data []byte
+ 			return err
+ 		}
+ 		if err = sendPkt(c.log, data, req.realDst, req.realSrc, req.src, req.lConn); err != nil {
+-			return err
++			c.log.WithError(err).WithFields(logrus.Fields{
++				"from": req.realSrc.String(),
++				"to":   req.realDst.String(),
++			}).Warn("failed to send DNS response")
++			// 不返回错误，避免程序崩溃
+ 		}
+ 	}
+ 	return nil
+diff --git a/control/udp.go b/control/udp.go
+index 8344a7e03..0c7021ecd 100644
+--- a/control/udp.go
++++ b/control/udp.go
+@@ -55,7 +55,12 @@ func ChooseNatTimeout(data []byte, sniffDns bool) (dmsg *dnsmessage.Msg, timeout
+ func sendPkt(log *logrus.Logger, data []byte, from netip.AddrPort, realTo, to netip.AddrPort, lConn *net.UDPConn) (err error) {
+ 	uConn, _, err := DefaultAnyfromPool.GetOrCreate(from.String(), AnyfromTimeout)
+ 	if err != nil {
+-		return
++		// 如果无法创建连接，记录详细错误但不崩溃
++		log.WithError(err).WithFields(logrus.Fields{
++			"from": from.String(),
++			"to":   realTo.String(),
++		}).Debug("Failed to get UDP connection from pool, skipping packet")
++		return err
+ 	}
+ 	_, err = uConn.WriteToUDPAddrPort(data, realTo)
+ 	return err

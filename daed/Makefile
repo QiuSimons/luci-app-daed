@@ -79,6 +79,7 @@ define Build/Prepare
 		git submodule update --init ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/822.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/82058ae.patch | patch -p1 ; \
+		wget -qO - https://github.com/LostAttractor/dae/commit/30f0f6c.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/585ccfb.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/77b54f2.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/962fcdf.patch | patch -p1 ; \

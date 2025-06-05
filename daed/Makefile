@@ -78,8 +78,6 @@ define Build/Prepare
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/822.patch | patch -p1 ; \
-		wget -qO - https://github.com/LostAttractor/dae/commit/82058ae.patch | patch -p1 ; \
-		wget -qO - https://github.com/LostAttractor/dae/commit/ab04c08.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/585ccfb.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/77b54f2.patch | patch -p1 ; \
 		wget -qO - https://github.com/LostAttractor/dae/commit/962fcdf.patch | patch -p1 ; \

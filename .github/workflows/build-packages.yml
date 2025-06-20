@@ -43,7 +43,7 @@ jobs:
           echo "version=$latest_commit-wing_$latest_wing_commit-core_$latest_core_commit" >> "$GITHUB_ENV"
 
       - name: Building packages
-        uses: sbwml/openwrt-gh-action-sdk@go1.23
+        uses: sbwml/openwrt-gh-action-sdk@go1.25
         env:
           ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
           FEEDNAME: packages_ci
@@ -55,14 +55,3 @@ jobs:
         with:
           name: ${{ matrix.arch }}
           path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
-
-      - name: Upload packages
-        uses: ncipollo/release-action@v1
-        with:
-          name: daed_${{ env.version }}
-          allowUpdates: true
-          tag: daed_${{ env.version }}
-          commit: master
-          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
-          replacesArtifacts: true
-          artifacts: "bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"

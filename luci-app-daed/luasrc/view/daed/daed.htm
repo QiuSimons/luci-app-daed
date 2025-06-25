@@ -4,20 +4,26 @@
 %>
 <% if tonumber(running) ~= nil then %>
 	<div class="cbi-map">
-		<iframe id="daed" style="width: 100%; min-height: 780px; border: none; border-radius: .375rem;box-shadow: rgba(0, 0, 0, 0.75) 0px 0px 15px -5px;"></iframe>
+		<iframe id="daed" class="daed-iframe"></iframe>
 	</div>
+	<style>
+	.daed-iframe {
+		width: 100%;
+		height: 100vh;
+		min-height: 780px;
+		border: none;
+		border-radius: .375rem;
+		box-shadow: rgba(0, 0, 0, 0.75) 0px 0px 15px -5px;
+		display: block;
+	}
+	</style>
 	<script type="text/javascript">
 		var listenAddr = "<%=luci.model.uci.cursor():get_first("daed", "daed", "listen_addr")%>";
 		var portRegex = /:(\d+)/;
 		var match = listenAddr.match(portRegex);
 		if (match && match[1]) {
 			var port = match[1];
-			// 使用提取到的端口号进行后续操作
 			document.getElementById("daed").src = window.location.protocol + "//" + window.location.hostname + ":" + port;
-		}
-		document.getElementById("daed").height = document.documentElement.clientHeight;
-		window.onresize = function(){
-			document.getElementById("daed").height = document.documentElement.clientHeight;
 		}
 	</script>
 <% else %>

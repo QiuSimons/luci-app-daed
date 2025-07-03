@@ -23,6 +23,28 @@ delcron() {
   crontab $CRON_FILE
 }
 
+setlocaluse() {
+  uci set dhcp.@dnsmasq[0].localuse="1"
+  uci commit dhcp
+  /etc/init.d/dnsmasq restart
+}
+
+dellocaluse() {
+  uci set dhcp.@dnsmasq[0].localuse="0"
+  uci commit dhcp
+  /etc/init.d/dnsmasq restart
+  . /lib/functions/network.sh
+  network_find_wan LOGICAL_WAN || exit 1
+  dns_list=$(ubus call network.interface.$LOGICAL_WAN status | jsonfilter -e '@["dns-server"]' | sed 's/[]["]//g' | sed 's/,/\n/g' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+  [ -z "$dns_list" ] && dns_list="223.5.5.5 119.29.29.29 180.76.76.76"
+  grep -v '^nameserver ' /etc/resolv.conf > /tmp/resolv.conf.new.daed 2>/dev/null
+  for dns in $dns_list; do
+    echo "nameserver $dns" >> /tmp/resolv.conf.new.daed
+  done
+  cat /tmp/resolv.conf.new.daed > /etc/resolv.conf
+  rm -f /tmp/resolv.conf.new.daed
+}
+
 start_service() {
   [ -f "/etc/init.d/daed" ] && grep -q "DAE_LOCATION_ASSET" "/etc/init.d/daed" || sed -i '/run/i\  procd_set_param env DAE_LOCATION_ASSET="/usr/share/v2ray"' "/etc/init.d/daed"
   config_load "$CONF"
@@ -31,13 +53,16 @@ start_service() {
   config_get_bool enabled "config" "enabled" "0"
   if [ "$enabled" -eq 0 ]; then
     delcron
+    setlocaluse
     return 1
   fi
   setcron
+  dellocaluse
 }
 
 stop_service() {
   delcron
+  setlocaluse
 }
 
 service_triggers() {

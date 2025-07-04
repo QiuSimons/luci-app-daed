@@ -82,6 +82,7 @@ define Build/Prepare
 		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/839.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/849.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/11e272f.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/commit/fe20094.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \

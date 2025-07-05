@@ -5,10 +5,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.06.18
+PKG_VERSION:=2025.07.09
 DAED_VERSION:=daed-c3588a9
 WING_VERSION:=wing-6df3da2
-CORE_VERSION:=core-9d1a22a
+CORE_VERSION:=core-a4761c8
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
 CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
 PKG_RELEASE:=1
@@ -78,10 +78,18 @@ define Build/Prepare
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		sed -i '/UDPHopInterval/d' component/outbound/dialer/dialer.go ; \
+		sed -i 's/, conf.Global.Mptcp//g' cmd/run.go ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/cfd6cf9.patch | patch -p1 ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
-		sed -i 's/conn, err /conn, _, err /g' dae/httpclient.go ; \
+		sed -i '/logrus/d' db/node_utils.go ; \
+		sed -i 's/log, newConf.Global.LogLevel/newConf.Global.LogLevel/g' dae/run.go ; \
+		sed -i 's/logrus.StandardLogger(), //g' dae/run.go ; \
+		sed -i '/CloneDnsCache/d' dae/run.go ; \
+		sed -i '/		log,/d' dae/run.go ; \
+		sed -i '/		dnsCache,/d' dae/run.go ; \
+		sed -i 's/noLogger, //g' graphql/service/subscription/mutation_utils.go ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \

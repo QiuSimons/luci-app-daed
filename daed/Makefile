@@ -79,7 +79,7 @@ define Build/Prepare
 		git submodule update --init ; \
 		sed -i '/UDPHopInterval/d' component/outbound/dialer/dialer.go ; \
 		sed -i 's/, conf.Global.Mptcp//g' cmd/run.go ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/e302637.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/9d6d501.patch | patch -p1 ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \

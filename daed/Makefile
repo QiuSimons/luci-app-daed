@@ -87,6 +87,9 @@ define Build/Prepare
 		wget -qO - https://github.com/daeuniverse/dae/commit/6ff101c.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/commit/5740b94.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/commit/cec1642.patch | patch -p1 ; \
+		sed -i 's/Warn("failed to write cached DNS resp")/Debug("failed to write cached DNS resp")/g' control/dns_control.go ; \
+		sed -i 's/Warn("failed to send DNS response")/Debug("failed to send DNS response")/g' control/dns_control.go ; \
+		sed -i 's/Warn("failed to send DNS reject response")/Debug("failed to send DNS reject response")/g' control/dns_control.go ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \

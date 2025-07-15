@@ -81,8 +81,12 @@ define Build/Prepare
 		git submodule update --init ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
 		wget -qO - https://github.com/daeuniverse/dae/pull/839.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/849.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/fe20094.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/56fb759.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/af2e2c6.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/d96dc26.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/6ff101c.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/5740b94.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/cec1642.patch | patch -p1 ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \

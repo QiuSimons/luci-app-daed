@@ -5,10 +5,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.07.12
+PKG_VERSION:=2025.07.14
 DAED_VERSION:=daed-c3588a9
 WING_VERSION:=wing-6df3da2
-CORE_VERSION:=core-344666b
+CORE_VERSION:=core-f340cbd
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
 CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
 PKG_RELEASE:=1
@@ -35,9 +35,7 @@ GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
 	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
 GO_PKG_TAGS:=embedallowed
-GO_PKG_TARGET_VARS:=$(filter-out CGO_ENABLED=%,$(GO_PKG_TARGET_VARS)) \
-	CGO_ENABLED=1 \
-	GOEXPERIMENT=greenteagc
+GO_PKG_TARGET_VARS:=$(filter-out CGO_ENABLED=%,$(GO_PKG_TARGET_VARS)) CGO_ENABLED=1
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
@@ -76,24 +74,23 @@ define Build/Prepare
 	( \
 		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
 		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
+		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone -b dirty https://github.com/LostAttractor/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/763.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/pull/839.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/56fb759.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/af2e2c6.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/d96dc26.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/6ff101c.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/5740b94.patch | patch -p1 ; \
-		wget -qO - https://github.com/daeuniverse/dae/commit/cec1642.patch | patch -p1 ; \
-		sed -i 's/Warn("failed to write cached DNS resp")/Debug("failed to write cached DNS resp")/g' control/dns_control.go ; \
-		sed -i 's/Warn("failed to send DNS response")/Debug("failed to send DNS response")/g' control/dns_control.go ; \
-		sed -i 's/Warn("failed to send DNS reject response")/Debug("failed to send DNS reject response")/g' control/dns_control.go ; \
-		go mod tidy ; \
+		sed -i '/UDPHopInterval/d' component/outbound/dialer/dialer.go ; \
+		sed -i 's/, conf.Global.Mptcp//g' cmd/run.go ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/02cbbab.patch | patch -p1 ; \
+		wget -qO - https://github.com/daeuniverse/dae/commit/0517e24.patch | patch -p1 ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/ca02961.patch | patch -p1 ; \
+		sed -i '/logrus/d' db/node_utils.go ; \
+		sed -i 's/log, newConf.Global.LogLevel/newConf.Global.LogLevel/g' dae/run.go ; \
+		sed -i 's/logrus.StandardLogger(), //g' dae/run.go ; \
+		sed -i '/CloneDnsCache/d' dae/run.go ; \
+		sed -i '/		log,/d' dae/run.go ; \
+		sed -i '/		dnsCache,/d' dae/run.go ; \
+		sed -i 's/noLogger, //g' graphql/service/subscription/mutation_utils.go ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \

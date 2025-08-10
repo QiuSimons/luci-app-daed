@@ -5,10 +5,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.07.14
+PKG_VERSION:=2025.08.09
 DAED_VERSION:=daed-c3588a9
 WING_VERSION:=wing-6df3da2
-CORE_VERSION:=core-f340cbd
+CORE_VERSION:=core-6856048
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
 CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
 PKG_RELEASE:=1
@@ -74,7 +74,7 @@ define Build/Prepare
 	( \
 		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
 		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone -b dirty https://github.com/LostAttractor/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
+		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone -b next https://github.com/LostAttractor/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		sed -i '/UDPHopInterval/d' component/outbound/dialer/dialer.go ; \

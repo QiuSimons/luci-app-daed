@@ -5,7 +5,7 @@ msgid "DAED"
 msgstr "DAED"
 
 msgid "DAE is a Linux high-performance transparent proxy solution based on eBPF, And DAED is a modern dashboard for dae."
-msgstr "DAE是一个基于eBPF的Linux高性能透明代理解决方案，而DAED是DAE的管理面板。"
+msgstr "DAE是一个基于eBPF的Linux高性能透明代理解决方案,而DAED是DAE的管理面板。"
 
 msgid "Base Setting"
 msgstr "基本设置"
@@ -32,10 +32,19 @@ msgid "Logfile retention count"
 msgstr "日志文件保留数量"
 
 msgid "Logfile Max Size (MB)"
-msgstr "日志文件大小（MB）"
+msgstr "日志文件大小(MB)"
 
 msgid "Set the DAED listen address"
 msgstr "设置监听地址"
+
+msgid "Dashboard Access Port"
+msgstr "仪表板访问端口"
+
+msgid "Leave empty to use listen port"
+msgstr "留空则使用监听端口"
+
+msgid "For reverse proxy scenarios, leave empty to use the port from listen address"
+msgstr "用于反向代理场景,留空则使用监听地址的端口"
 
 msgid "DAED is not running"
 msgstr "DAED 未运行"
@@ -50,7 +59,7 @@ msgid "Update Cycle"
 msgstr "更新周期"
 
 msgid "Update Time (Every Day)"
-msgstr "更新时间（每天）"
+msgstr "更新时间(每天)"
 
 msgid "Username"
 msgstr "用户名"

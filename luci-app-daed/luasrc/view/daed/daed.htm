@@ -18,12 +18,30 @@
 	}
 	</style>
 	<script type="text/javascript">
-		var listenAddr = "<%=luci.model.uci.cursor():get_first("daed", "daed", "listen_addr")%>";
-		var portRegex = /:(\d+)/;
-		var match = listenAddr.match(portRegex);
-		if (match && match[1]) {
-			var port = match[1];
-			document.getElementById("daed").src = window.location.protocol + "//" + window.location.hostname + ":" + port;
+		var listenAddr = "<%=luci.model.uci.cursor():get_first("daed", "daed", "listen_addr") or ''%>";
+		var dashboardPort = "<%=luci.model.uci.cursor():get_first("daed", "daed", "dashboard_port") or ''%>";
+		
+		var port = "";
+		if (dashboardPort && dashboardPort.trim() !== "") {
+			port = dashboardPort.trim();
+		} else {
+			var portRegex = /:(\d+)/;
+			var match = listenAddr.match(portRegex);
+			if (match && match[1]) {
+				port = match[1];
+			}
+		}
+		
+		if (port) {
+			var protocol = window.location.protocol;
+			var hostname = window.location.hostname;
+			var url = protocol + "//" + hostname;
+			
+			if (!((protocol === "http:" && port === "80") || (protocol === "https:" && port === "443"))) {
+				url += ":" + port;
+			}
+			
+			document.getElementById("daed").src = url;
 		}
 	</script>
 <% else %>

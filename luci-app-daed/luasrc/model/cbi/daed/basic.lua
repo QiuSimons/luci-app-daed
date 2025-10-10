@@ -54,6 +54,11 @@ o.default = 5
 o = s:option(Value, "listen_addr",translate("Set the DAED listen address"))
 o.default = '0.0.0.0:2023'
 
+o = s:option(Value, "dashboard_port", translate("Dashboard Access Port"))
+o.placeholder = translate("Leave empty to use listen port")
+o.datatype = "range(1,65535)"
+o.description = translate("For reverse proxy scenarios, leave empty to use the port from listen address")
+
 m.apply_on_parse = true
 m.on_after_apply = function(self,map)
 	luci.sys.exec("/etc/init.d/daed restart")

@@ -35,15 +35,16 @@ GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
 	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
 GO_PKG_TAGS:=embedallowed
-GO_PKG_TARGET_VARS:=$(filter-out CGO_ENABLED=%,$(GO_PKG_TARGET_VARS)) \
-	CGO_ENABLED=1 \
-	GOEXPERIMENT=greenteagc
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
-GO_PKG_DEFAULT_LDFLAGS:=-w -s -extldflags "-static"
+GO_PKG_TARGET_VARS+= \
+	CGO_LDFLAGS="$(TARGET_LDFLAGS) -static" \
+	GOEXPERIMENT=greenteagc
+GO_PKG_DEFAULT_LDFLAGS:=-w -s -linkmode external -extldflags '-static'
+
 TAR_CMD=$(HOST_TAR) -C $(BUILD_DIR)/ $(TAR_OPTIONS)
 
 define Package/daed/Default
@@ -105,13 +106,8 @@ endef
 DAE_CFLAGS:= \
 	-O2 -Wall -Werror \
 	-DMAX_MATCH_SET_LEN=1024 \
-	-D__UNROLL_ROUTE_LOOP \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
-
-ifneq ($(CONFIG_USE_MUSL),)
-  TARGET_CFLAGS += -D_LARGEFILE64_SOURCE
-endif
 
 define Build/Compile
 	( \

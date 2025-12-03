@@ -30,11 +30,10 @@ jobs:
 
       - name: Update Makefile
         run: |
-          chmod 755 ./daed/files/daed.init ./luci-app-daed/root/etc/init.d/luci_daed ./luci-app-daed/root/etc/daed/daed_sub.sh ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
+          chmod 755 ./daed/files/daed.init ./luci-app-daed/root/etc/init.d/luci_daed ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
           find . -type f -exec dos2unix {} \; -print
           dos2unix ./daed/files/daed.init
           dos2unix ./luci-app-daed/root/etc/init.d/luci_daed
-          dos2unix ./luci-app-daed/root/etc/daed/daed_sub.sh
           dos2unix ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
           latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
           latest_wing_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)"

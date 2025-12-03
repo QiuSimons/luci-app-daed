@@ -52,16 +52,16 @@ start_service() {
   local enabled
   config_get_bool enabled "config" "enabled" "0"
   if [ "$enabled" -eq 0 ]; then
-    delcron
+    #delcron
     setlocaluse
     return 1
   fi
-  setcron
+  #setcron
   dellocaluse
 }
 
 stop_service() {
-  delcron
+  #delcron
   setlocaluse
 }
 

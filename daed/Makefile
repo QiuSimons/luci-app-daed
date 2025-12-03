@@ -81,7 +81,7 @@ define Build/Prepare
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
 		go get -u=patch ; \
-		go get github.com/cilium/ebpf@latest ; \
+		go get github.com/cilium/ebpf@v0.16.0 ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \

@@ -35,24 +35,40 @@ jobs:
           dos2unix ./daed/files/daed.init
           dos2unix ./luci-app-daed/root/etc/init.d/luci_daed
           dos2unix ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
+
+          date_daed_iso=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.committer.date')
+          date_wing_iso=$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.commit.committer.date')
+          date_core_iso=$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.commit.committer.date')
+
+          latest_iso_date=$(echo -e "$date_daed_iso\n$date_wing_iso\n$date_core_iso" | sort -r | head -n 1)
+
+          pkg_version=$(date -d "$latest_iso_date" +%Y.%m.%d)
+          
+          echo "Selected latest date: $latest_iso_date formatted as $pkg_version"
+
           latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
           latest_wing_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)"
           latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
-          latest_core_date="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.commit.committer.date | split("T")[0] | split("-") | "\(.[0]).\(.[1]).\(.[2])"')"
+          
           latest_commit_full="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha')"
           timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
-          weburl=$(curl -s https://api.github.com/repos/daeuniverse/daed/releases | grep -oP '"browser_download_url": "\K[^"]*web.zip' | head -n 1 | sed 's@/[^/]*$@@')
           formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
+          
           sed -i '/PKG_VERSION:/d' ./daed/Makefile
-          sed -i "7 a PKG_VERSION:=$latest_core_date" ./daed/Makefile
+          sed -i "7 a PKG_VERSION:=$pkg_version" ./daed/Makefile
+          
           sed -i '/DAED_VERSION:/d' ./daed/Makefile
           sed -i "8 a DAED_VERSION:=daed-$latest_commit" ./daed/Makefile
+          
           sed -i '/WING_VERSION:=/d' ./daed/Makefile
           sed -i "9 a WING_VERSION:=wing-$latest_wing_commit" ./daed/Makefile
+          
           sed -i '/CORE_VERSION:=/d' ./daed/Makefile
           sed -i "10 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
+          
           sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
           sed -i "17 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
+          
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Commit file

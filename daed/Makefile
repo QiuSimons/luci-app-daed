@@ -5,8 +5,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.11.03
-DAED_VERSION:=daed-b53647e
+PKG_VERSION:=2025.12.07
+DAED_VERSION:=daed-f41f589
 WING_VERSION:=wing-6bb6a31
 CORE_VERSION:=core-7e67e31
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
@@ -15,7 +15,7 @@ PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_VERSION:=b53647eba1ee6d990dd7729100c7e73cca732e4a
+PKG_SOURCE_VERSION:=f41f5895446b272ff817988ae9d78cb041145884
 PKG_SOURCE_URL:=https://github.com/daeuniverse/daed.git
 PKG_MIRROR_HASH:=skip
 
@@ -90,16 +90,21 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
+		mkdir -p $(PKG_BUILD_DIR)/.home ; \
 		wget -qO - "$(NODE_URL)" | tar -xJ -C $(PKG_BUILD_DIR)/.node_tmp --strip-components=1 ; \
 		export PATH="$(PKG_BUILD_DIR)/.node_tmp/bin:$$$$PATH" ; \
+		export HOME="$(PKG_BUILD_DIR)/.home" ; \
+		export XDG_CONFIG_HOME="$(PKG_BUILD_DIR)/.home/.config" ; \
+		export XDG_CACHE_HOME="$(PKG_BUILD_DIR)/.home/.cache" ; \
 		npm install -g pnpm ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
 		pnpm config set engine-strict false ; \
+		pnpm config set store-dir $(PKG_BUILD_DIR)/.home/.pnpm-store ; \
 		pnpm install --shamefully-hoist --no-frozen-lockfile ; \
-		pnpm build ; \
+		TURBO_TELEMETRY_DISABLED=1 pnpm build ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
-		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
+		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
 		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff"  ! -name "*.woff2" -exec sh -c '\
 			gzip -9 -k "{}"; \
 			if [ "$$$$(stat -c %s {})" -lt "$$$$(stat -c %s {}.gz)" ]; then \
@@ -109,6 +114,7 @@ define Build/Prepare
 			fi' \
 		";" ; \
 		rm -rf $(PKG_BUILD_DIR)/.node_tmp ; \
+		rm -rf $(PKG_BUILD_DIR)/.home ; \
 	)
 endef
 

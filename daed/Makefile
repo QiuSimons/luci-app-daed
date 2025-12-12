@@ -101,7 +101,8 @@ define Build/Prepare
 		pnpm config set engine-strict false ; \
 		pnpm config set store-dir $(PKG_BUILD_DIR)/.home/.pnpm-store ; \
 		pnpm install --shamefully-hoist --no-frozen-lockfile ; \
-		TURBO_TELEMETRY_DISABLED=1 pnpm build ; \
+		export NODE_OPTIONS="--max-old-space-size=3072" ; \
+		TURBO_TELEMETRY_DISABLED=1 pnpm build -- --concurrency=1 ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
 		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \

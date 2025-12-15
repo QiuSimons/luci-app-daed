@@ -5,8 +5,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.12.10
-DAED_VERSION:=daed-3a934fc
+PKG_VERSION:=2025.12.15
+DAED_VERSION:=daed-b14dae8
 WING_VERSION:=wing-6bb6a31
 CORE_VERSION:=core-7e67e31
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
@@ -15,7 +15,7 @@ PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_VERSION:=3a934fc352e37729f8a21ad6b7fd5d6662a2990f
+PKG_SOURCE_VERSION:=b14dae8246dda1211c75a78b3fa33a46e5aaaa3e
 PKG_SOURCE_URL:=https://github.com/daeuniverse/daed.git
 PKG_MIRROR_HASH:=skip
 
@@ -70,7 +70,7 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
-NODE_VERSION:=v22.12.0
+NODE_VERSION:=v24.12.0
 NODE_DIST:=node-$(NODE_VERSION)-linux-x64
 NODE_URL:=https://nodejs.org/dist/$(NODE_VERSION)/$(NODE_DIST).tar.xz
 # NODE_DIST:=node-$(NODE_VERSION)-linux-x64-musl
@@ -90,18 +90,13 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
-		mkdir -p $(PKG_BUILD_DIR)/.home ; \
 		wget -qO - "$(NODE_URL)" | tar -xJ -C $(PKG_BUILD_DIR)/.node_tmp --strip-components=1 ; \
 		export PATH="$(PKG_BUILD_DIR)/.node_tmp/bin:$$$$PATH" ; \
-		export HOME="$(PKG_BUILD_DIR)/.home" ; \
-		export XDG_CONFIG_HOME="$(PKG_BUILD_DIR)/.home/.config" ; \
-		export XDG_CACHE_HOME="$(PKG_BUILD_DIR)/.home/.cache" ; \
+		export HOME="$(PKG_BUILD_DIR)/.node_tmp" ; \
 		npm install -g pnpm ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		pnpm config set engine-strict false ; \
-		pnpm config set store-dir $(PKG_BUILD_DIR)/.home/.pnpm-store ; \
-		pnpm install --shamefully-hoist --no-frozen-lockfile ; \
-		TURBO_TELEMETRY_DISABLED=1 pnpm build ; \
+		pnpm install ; \
+		pnpm build --filter daed ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
 		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
@@ -114,7 +109,6 @@ define Build/Prepare
 			fi' \
 		";" ; \
 		rm -rf $(PKG_BUILD_DIR)/.node_tmp ; \
-		rm -rf $(PKG_BUILD_DIR)/.home ; \
 	)
 endef
 

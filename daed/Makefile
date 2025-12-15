@@ -90,9 +90,10 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
+		mkdir -p $(PKG_BUILD_DIR)/.node_tmp/config ; \
 		wget -qO - "$(NODE_URL)" | tar -xJ -C $(PKG_BUILD_DIR)/.node_tmp --strip-components=1 ; \
 		export PATH="$(PKG_BUILD_DIR)/.node_tmp/bin:$$$$PATH" ; \
-		export HOME="$(PKG_BUILD_DIR)/.node_tmp" ; \
+		export XDG_CONFIG_HOME="$(PKG_BUILD_DIR)/.node_tmp/config" ; \
 		npm install -g pnpm ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
 		pnpm install ; \

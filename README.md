@@ -9,22 +9,18 @@
 -----------
 
 
-## Build on OpenWrt official 24.10/SnapShots
+## Build on OpenWrt official 25.12/SnapShots
 
 ### 1. Get Source
 ```bash
 git clone https://github.com/QiuSimons/luci-app-daed package/dae
-```
-- get the libcron
-```bash
-mkdir -p Package/libcron && wget -O Package/libcron/Makefile https://raw.githubusercontent.com/immortalwrt/packages/refs/heads/master/libs/libcron/Makefile
 ```
 
 ### 2. Install dependencies, refer to https://apt.llvm.org
 
 ```bash
 apt-get update
-apt-get install -y clang-15 llvm-15 npm
+apt-get install -y clang llvm npm
 npm install -g pnpm
 ```
 

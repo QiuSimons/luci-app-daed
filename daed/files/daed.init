@@ -7,6 +7,7 @@ START=99
 CONF="daed"
 PROG="/usr/bin/daed"
 LOG="/var/log/daed/daed.log"
+DAENETNS="/run/netns/daens"
 
 start_service() {
 	config_load "$CONF"
@@ -39,6 +40,7 @@ start_service() {
 
 stop_service() {
 	rm -f "$LOG"
+	[ -f "$DAENETNS" ] && unmount "$DAENETNS"
 }
 
 service_triggers() {

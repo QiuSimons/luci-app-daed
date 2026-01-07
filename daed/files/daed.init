@@ -40,7 +40,7 @@ start_service() {
 
 stop_service() {
 	rm -f "$LOG"
-	[ -f "$DAENETNS" ] && unmount "$DAENETNS"
+	[ -f "$DAENETNS" ] && umount "$DAENETNS"
 }
 
 service_triggers() {

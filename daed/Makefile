@@ -82,7 +82,6 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/olicesx/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
-		wget -qO - https://github.com/olicesx/dae/commit/9e3abaa.patch | patch -pR1 -N || true ; \
 		git submodule update --init ; \
 		go get -u=patch ; \
 		go mod tidy ; \

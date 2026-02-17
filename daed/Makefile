@@ -83,10 +83,13 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/olicesx/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
+        go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		go mod tidy ; \
+        go mod edit -replace github.com/daeuniverse/outbound=github.com/olicesx/outbound@$$$$(git ls-remote https://github.com/olicesx/outbound.git refs/heads/feat/ss2022-support | awk '{print $$$$1}')
+		go get -u=patch ; \
+        go mod tidy ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp/config ; \

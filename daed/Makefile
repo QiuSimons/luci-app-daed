@@ -137,6 +137,7 @@ define Build/Compile
 		go generate control/control.go ; \
 		go generate trace/trace.go ; \
 		popd ; \
+		go mod tidy ; \
 		$(call GoPackage/Build/Compile) ; \
 	)
 endef

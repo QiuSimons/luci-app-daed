@@ -83,8 +83,6 @@ define Build/Prepare
 		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/olicesx/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
-        go mod edit -replace="github.com/daeuniverse/outbound=github.com/olicesx/outbound@feat/ss2022-support" ; \
-		go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
@@ -128,7 +126,7 @@ define Build/Compile
 		$(GO_PKG_BUILD_CONFIG_VARS) \
 		$(GO_PKG_BUILD_VARS) ; \
 		go generate ./... ; \
-		pushd dae-core ; \
+		cd dae-core ; \
 		export \
 		BPF_CLANG="$(CLANG)" \
 		BPF_STRIP_FLAG="-strip=$(LLVM_STRIP)" \
@@ -138,7 +136,6 @@ define Build/Compile
 		go generate control/control.go ; \
 		go generate trace/trace.go ; \
 		popd ; \
-		go mod tidy ; \
 		$(call GoPackage/Build/Compile) ; \
 	)
 endef

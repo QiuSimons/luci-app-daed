@@ -86,10 +86,12 @@ define Build/Prepare
         go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-        go mod edit -replace github.com/daeuniverse/outbound=github.com/olicesx/outbound@$$$$(git ls-remote https://github.com/olicesx/outbound.git refs/heads/feat/ss2022-support | awk '{print $$$$1}')
+        rm -rf $(PKG_BUILD_DIR)/../outbound ; \
+		git clone --depth=1 -b feat/ss2022-support https://github.com/olicesx/outbound.git $(PKG_BUILD_DIR)/../outbound ; \
+		pushd $(PKG_BUILD_DIR) ; \
+		go mod edit -replace github.com/daeuniverse/outbound=../outbound ; \
 		go get -u=patch ; \
-        go mod tidy ; \
+		go mod tidy ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp/config ; \

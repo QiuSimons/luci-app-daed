@@ -90,6 +90,7 @@ define Build/Prepare
 		git clone --depth=1 -b feat/ss2022-support https://github.com/olicesx/outbound.git $(PKG_BUILD_DIR)/../outbound ; \
 		pushd $(PKG_BUILD_DIR) ; \
 		go mod edit -replace github.com/daeuniverse/outbound=../outbound ; \
+		wget -qO - https://github.com/daeuniverse/dae-wing/commit/157668a.patch | patch -p1 -N || true ; \
 		go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \

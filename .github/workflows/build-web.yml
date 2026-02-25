@@ -3,7 +3,7 @@ name: Build Web
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 16 * * *
+    - cron: "*/30 * * * *"
 
 jobs:
   build:
@@ -14,11 +14,43 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Check Upstream Updates
+        id: check
+        run: |
+          # Fetch latest commits from upstream
+          UPSTREAM_DAED=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha')
+          UPSTREAM_WING=$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)
+          UPSTREAM_CORE=$(curl -s https://api.github.com/repos/olicesx/dae/commits/optimize/code-quality-fixes | jq -r '.sha' | cut -b 1-7)
+
+          # Get current versions from Makefile
+          CURRENT_DAED=$(grep "PKG_SOURCE_VERSION:=" daed/Makefile | cut -d= -f2)
+          CURRENT_WING=$(grep "WING_VERSION:=wing-" daed/Makefile | sed 's/.*wing-//' | head -n 1)
+          CURRENT_CORE=$(grep "CORE_VERSION:=core-" daed/Makefile | sed 's/.*core-//' | head -n 1)
+
+          echo "Upstream DAED: $UPSTREAM_DAED, Local: $CURRENT_DAED"
+          echo "Upstream WING: $UPSTREAM_WING, Local: $CURRENT_WING"
+          echo "Upstream CORE: $UPSTREAM_CORE, Local: $CURRENT_CORE"
+
+          NEED_UPDATE=false
+          if [ "$UPSTREAM_DAED" != "$CURRENT_DAED" ]; then NEED_UPDATE=true; fi
+          if [ "$UPSTREAM_WING" != "$CURRENT_WING" ]; then NEED_UPDATE=true; fi
+          if [ "$UPSTREAM_CORE" != "$CURRENT_CORE" ]; then NEED_UPDATE=true; fi
+
+          if [ "$NEED_UPDATE" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Update needed or manual trigger!"
+            echo "update_needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Everything up to date."
+            echo "update_needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@main
+        if: steps.check.outputs.update_needed == 'true'
         with:
           node-version: 18
 
       - name: Build System Setup
+        if: steps.check.outputs.update_needed == 'true'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -29,6 +61,7 @@ jobs:
           sudo npm i taze -g
 
       - name: Update Makefile
+        if: steps.check.outputs.update_needed == 'true'
         run: |
           chmod 755 ./daed/files/daed.init ./luci-app-daed/root/etc/init.d/luci_daed ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
           find . -type f -exec dos2unix {} \; -print
@@ -72,6 +105,7 @@ jobs:
           echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
 
       - name: Commit file
+        if: steps.check.outputs.update_needed == 'true'
         run: |
           rm -rf build
           git config --global user.email simonsqiu@foxmail.com
@@ -81,21 +115,15 @@ jobs:
         continue-on-error: true
 
       - name: Push changes
+        if: steps.check.outputs.update_needed == 'true'
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{secrets.ACTIONS_DEPLOY_KEY}}
           branch: kix
         continue-on-error: true
 
-      - name: Cleanup Workflow Logs
-        uses: Mattraks/delete-workflow-runs@main
-        with:
-          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
-          repository: ${{ github.repository }}
-          retain_days: 1
-        continue-on-error: true
-
       - name: Delete Older Releases
+        if: steps.check.outputs.update_needed == 'true'
         uses: dev-drprasad/delete-older-releases@master
         with:
           keep_latest: 3
@@ -105,6 +133,7 @@ jobs:
         continue-on-error: true
 
       - name: Cleanup Old Action Artifacts
+        if: steps.check.outputs.update_needed == 'true'
         uses: c-hive/gha-remove-artifacts@master
         with:
           age: '3 days'

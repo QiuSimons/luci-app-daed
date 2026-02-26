@@ -90,6 +90,10 @@ define Build/Prepare
 		git clone --depth=1 -b perf/complete-optimizations https://github.com/olicesx/outbound.git $(PKG_BUILD_DIR)/../outbound ; \
 		pushd $(PKG_BUILD_DIR) ; \
 		go mod edit -replace github.com/daeuniverse/outbound=../outbound ; \
+		rm -rf $(PKG_BUILD_DIR)/../quic-go ; \
+		git clone --depth=1 -b main https://github.com/olicesx/quic-go.git $(PKG_BUILD_DIR)/../quic-go ; \
+		pushd $(PKG_BUILD_DIR) ; \
+		go mod edit -replace github.com/daeuniverse/quic-go=../quic-go ; \
 		wget -qO - https://github.com/daeuniverse/dae-wing/commit/157668a.patch | patch -p1 -N || true ; \
 		go get -u=patch ; \
 		go mod tidy ; \

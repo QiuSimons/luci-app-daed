@@ -24,6 +24,7 @@ jobs:
       - name: Get node-empty
         run: |
           git clone https://github.com/sbwml/node-empty
+          git clone https://github.com/QiuSimons/vmlinux-btf
 
       - name: Init build dependencies
         env:

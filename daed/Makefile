@@ -63,7 +63,7 @@ define Package/daed
 	+DAED_USE_VMLINUX_BTF:vmlinux-btf
 endef
 
-define Package/dae/config
+define Package/daed/config
 	choice
 		prompt "BTF source for CO-RE"
 		default DAED_USE_KERNEL_BTF

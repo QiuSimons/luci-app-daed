@@ -1,0 +1,68 @@
+From 7b4dc964084e0ec8aba7a4fc104708e82c5d1297 Mon Sep 17 00:00:00 2001
+From: AI Builder Bot <bot@example.com>
+Date: Thu, 12 Mar 2026 16:30:43 +0800
+Subject: [PATCH] feat(control): unify UDP error thresholds and handle AEAD
+ auth failure
+
+---
+ common/errors/errors.go      |  8 +++++++-
+ control/udp_endpoint_pool.go | 10 +++++-----
+ 2 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/common/errors/errors.go b/common/errors/errors.go
+index 923aaa4..af50ec7 100644
+--- a/common/errors/errors.go
++++ b/common/errors/errors.go
+@@ -245,7 +245,13 @@ func IsReplayAttackError(err error) bool {
+ 	return Contains(err.Error(), "replay attack")
+ }
+ 
+-// ContainsIgnorableErrorPattern provides fallback pattern matching
++// IsAuthError reports whether err is an authentication error (e.g., AEAD check failed).
++func IsAuthError(err error) bool {
++	if err == nil {
++		return false
++	}
++	return Contains(err.Error(), "cipher: message authentication failed")
++}
+ // for errors that don't properly implement error wrapping.
+ func ContainsIgnorableErrorPattern(s string) bool {
+ 	patterns := []string{
+diff --git a/control/udp_endpoint_pool.go b/control/udp_endpoint_pool.go
+index 48b8e8c..b526c2d 100644
+--- a/control/udp_endpoint_pool.go
++++ b/control/udp_endpoint_pool.go
+@@ -64,7 +64,7 @@ type UdpEndpoint struct {
+ 
+ 	dead atomic.Bool
+ 
+-	replayAttackCount int
++	softErrorCount int
+ 
+ 	// poolRef and poolKey allow the read loop to self-remove from the pool the
+ 	// instant it detects death. This minimises the window during which a stale
+@@ -105,9 +105,9 @@ func (ue *UdpEndpoint) start() {
+ 	for {
+ 		n, from, err := ue.conn.ReadFrom(buf[:])
+ 		if err != nil {
+-			if daerrors.IsReplayAttackError(err) && ue.replayAttackCount < 20 {
+-				ue.replayAttackCount++
+-				ue.logEndpointExit(fmt.Errorf("%w (hit %d/20)", err, ue.replayAttackCount), "read loop (ignored)")
++			if (daerrors.IsReplayAttackError(err) || daerrors.IsAuthError(err)) && ue.softErrorCount < 10 {
++				ue.softErrorCount++
++				ue.logEndpointExit(fmt.Errorf("%w (hit %d/10)", err, ue.softErrorCount), "read loop (ignored)")
+ 				continue
+ 			}
+ 			ue.dead.Store(true)
+@@ -116,7 +116,7 @@ func (ue *UdpEndpoint) start() {
+ 			ue.logEndpointExit(err, "read loop")
+ 			break
+ 		}
+-		ue.replayAttackCount = 0
++		ue.softErrorCount = 0
+ 		ue.RefreshTtl()
+ 		if err = ue.handler(ue, buf[:n], from); err != nil {
+ 			ue.dead.Store(true)
+-- 
+2.43.0
+

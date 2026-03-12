@@ -1,0 +1,1175 @@
+diff --git a/cmd/run.go b/cmd/run.go
+index dc7dd27..8639159 100644
+--- a/cmd/run.go
++++ b/cmd/run.go
+@@ -148,12 +148,15 @@ func Run(log *logrus.Logger, conf *config.Config, externGeoDataDirs []string) (e
+ 	go func() {
+ 		readyChan := make(chan bool, 1)
+ 		go func() {
+-			<-readyChan
+-			sdnotify.Ready()
+-			if !disablePidFile {
+-				_ = os.WriteFile(PidFilePath, []byte(strconv.Itoa(os.Getpid())), 0644)
++			if <-readyChan {
++				sdnotify.Ready()
++				if !disablePidFile {
++					_ = os.WriteFile(PidFilePath, []byte(strconv.Itoa(os.Getpid())), 0644)
++				}
++				_ = os.WriteFile(SignalProgressFilePath, []byte{consts.ReloadDone}, 0644)
++			} else {
++				log.Warn("Initialization failed; not signaling readiness to supervisor")
+ 			}
+-			_ = os.WriteFile(SignalProgressFilePath, []byte{consts.ReloadDone}, 0644)
+ 		}()
+ 		if runErr := control.GetDaeNetns().WithRequired("listen and serve in dae netns", func() error {
+ 			if listener, err = c.ListenAndServe(readyChan, conf.Global.TproxyPort); err != nil {
+@@ -163,7 +166,7 @@ func Run(log *logrus.Logger, conf *config.Config, externGeoDataDirs []string) (e
+ 		}); runErr != nil {
+ 			log.Errorln("GetDaeNetns.With:", runErr)
+ 		}
+-		sigs <- nil
++		sendSigExit(sigs)
+ 	}()
+ 	reloading := false
+ 	reloadingErr := error(nil)
+@@ -187,7 +190,7 @@ loop:
+ 						}); runErr != nil {
+ 							log.Errorln("GetDaeNetns.With:", runErr)
+ 						}
+-						sigs <- nil
++						sendSigExit(sigs)
+ 					}()
+ 					<-readyChan
+ 					sdnotify.Ready()
+@@ -208,7 +211,7 @@ loop:
+ 					if err := c.Serve(readyChan, listener); err != nil {
+ 						log.Errorln("ListenAndServe:", err)
+ 					}
+-					sigs <- nil
++					sendSigExit(sigs)
+ 				}()
+ 				<-readyChan
+ 				sdnotify.Ready()
+@@ -346,7 +349,9 @@ loop:
+ 			oldC.Close()
+ 
+ 			if pprofServer != nil {
+-				pprofServer.Shutdown(context.Background())
++				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
++				_ = pprofServer.Shutdown(ctx)
++				cancel()
+ 				pprofServer = nil
+ 			}
+ 			if newConf.Global.PprofPort != 0 {
+@@ -362,14 +367,34 @@ loop:
+ 			break loop
+ 		}
+ 	}
+-	defer os.Remove(PidFilePath)
+-	defer control.GetDaeNetns().Close()
++	defer func() {
++		sdnotify.Stopping()
++		if pprofServer != nil {
++			log.Infoln("Shutting down pprof server")
++			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
++			_ = pprofServer.Shutdown(ctx)
++			cancel()
++		}
++		os.Remove(PidFilePath)
++		control.GetDaeNetns().Close()
++	}()
++
++	if e := c.AbortConnections(); e != nil {
++		log.Warnf("abort connections: %v", e)
++	}
+ 	if e := c.Close(); e != nil {
+ 		return fmt.Errorf("close control plane: %w", e)
+ 	}
+ 	return nil
+ }
+ 
++func sendSigExit(sigs chan<- os.Signal) {
++	select {
++	case sigs <- nil:
++	default:
++	}
++}
++
+ func newControlPlane(log *logrus.Logger, bpf any, dnsCache map[string]*control.DnsCache, conf *config.Config, externGeoDataDirs []string) (c *control.ControlPlane, err error) {
+ 	// Deep copy to prevent modification.
+ 	conf = deepcopy.Copy(conf).(*config.Config)
+diff --git a/common/errors/errors.go b/common/errors/errors.go
+index 0d93b56..923aaa4 100644
+--- a/common/errors/errors.go
++++ b/common/errors/errors.go
+@@ -223,6 +223,12 @@ func IsUDPEndpointNormalClose(err error) bool {
+ 		return true
+ 	}
+ 
++	// Replay attack is a security error from proxy protocol, but can be ignored
++	// in some cases to improve stability.
++	if IsReplayAttackError(err) {
++		return true
++	}
++
+ 	// Check if connection was closed
+ 	if IsClosedConnection(err) {
+ 		return true
+@@ -231,6 +237,14 @@ func IsUDPEndpointNormalClose(err error) bool {
+ 	return false
+ }
+ 
++// IsReplayAttackError reports whether err is a replay attack error.
++func IsReplayAttackError(err error) bool {
++	if err == nil {
++		return false
++	}
++	return Contains(err.Error(), "replay attack")
++}
++
+ // ContainsIgnorableErrorPattern provides fallback pattern matching
+ // for errors that don't properly implement error wrapping.
+ func ContainsIgnorableErrorPattern(s string) bool {
+diff --git a/common/netutils/dns.go b/common/netutils/dns.go
+index 377fc2b..2be2572 100644
+--- a/common/netutils/dns.go
++++ b/common/netutils/dns.go
+@@ -285,7 +285,19 @@ func resolve(ctx context.Context, d netproxy.Dialer, dns netip.AddrPort, host st
+ 			ch <- err
+ 			return
+ 		}
+-		ans = msg.Answer
++
++		if msg.Id != builder.Id {
++			ch <- fmt.Errorf("id mismatch: expect %v, got %v", builder.Id, msg.Id)
++			return
++		}
++
++		// Use miekg/dns.Msg.Answer directly but ensure we don't return until
++		// we are sure the caller doesn't need the buffer anymore.
++		// Actually, to be absolutely safe against UAF, we should copy the RRs.
++		ans = make([]dnsmessage.RR, len(msg.Answer))
++		for i, rr := range msg.Answer {
++			ans[i] = dnsmessage.Copy(rr)
++		}
+ 		ch <- nil
+ 	}()
+ 	select {
+diff --git a/component/outbound/dialer/connectivity_check.go b/component/outbound/dialer/connectivity_check.go
+index bd69903..8372b91 100644
+--- a/component/outbound/dialer/connectivity_check.go
++++ b/component/outbound/dialer/connectivity_check.go
+@@ -728,12 +728,24 @@ func (d *Dialer) logUnavailable(
+ 
+ func (d *Dialer) markUnavailable(typ *NetworkType) collectionUpdate {
+ 	d.collectionFineMu.Lock()
+-	collection := d.mustGetCollection(typ)
++	idx := typ.Index()
++	collection := d.collections[idx]
+ 	collection.Latencies10.AppendLatency(Timeout)
+ 	collection.MovingAverage = (collection.MovingAverage + Timeout) / 2
+-	collection.Alive = false
++
++	// UDP robustness: only mark unavailable after 3 consecutive failures.
++	// This protects against transient Port 53 interference.
++	alive := false
++	if typ.L4Proto == consts.L4ProtoStr_UDP {
++		d.failCount[idx]++
++		if d.failCount[idx] < 3 {
++			alive = collection.Alive
++		}
++	}
++	collection.Alive = alive
++
+ 	update := collectionUpdate{
+-		alive:             false,
++		alive:             alive,
+ 		movingAverage:     collection.MovingAverage,
+ 		aliveDialerGroups: d.snapshotAliveDialerGroupsLocked(collection),
+ 	}
+@@ -743,7 +755,10 @@ func (d *Dialer) markUnavailable(typ *NetworkType) collectionUpdate {
+ 
+ func (d *Dialer) markAvailable(typ *NetworkType, latency time.Duration) (collectionUpdate, time.Duration) {
+ 	d.collectionFineMu.Lock()
+-	collection := d.mustGetCollection(typ)
++	idx := typ.Index()
++	collection := d.collections[idx]
++	d.failCount[idx] = 0
++
+ 	collection.Latencies10.AppendLatency(latency)
+ 	avg, _ := collection.Latencies10.AvgLatency()
+ 	collection.MovingAverage = (collection.MovingAverage + latency) / 2
+diff --git a/component/outbound/dialer/dialer.go b/component/outbound/dialer/dialer.go
+index 9c924de..e4d47a0 100644
+--- a/component/outbound/dialer/dialer.go
++++ b/component/outbound/dialer/dialer.go
+@@ -55,6 +55,8 @@ type Dialer struct {
+ 
+ 	httpClients  map[string]*http.Client
+ 	httpClientMu sync.Mutex
++
++	failCount [6]int
+ }
+ 
+ type GlobalOption struct {
+diff --git a/component/sniffing/internal/quicutils/cipher.go b/component/sniffing/internal/quicutils/cipher.go
+index 99364da..24067ec 100644
+--- a/component/sniffing/internal/quicutils/cipher.go
++++ b/component/sniffing/internal/quicutils/cipher.go
+@@ -48,7 +48,7 @@ func (k *Keys) Close() error {
+ func NewKeys(clientDstConnectionId []byte, version Version, newAead func(key []byte) (cipher.AEAD, error)) (keys *Keys, err error) {
+ 	// https://datatracker.ietf.org/doc/html/rfc9001#name-keys
+ 	initialSecret := hkdf.Extract(sha256.New, clientDstConnectionId, version.InitialSalt())
+-	clientInitialSecret, err := HkdfExpandLabelFromPool(sha256.New, initialSecret, InitialClientLabel, nil, 32)
++	clientInitialSecret, err := HkdfExpandLabelFromPool(sha256.New, initialSecret, version.InitialSecretLabel(), nil, 32)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -84,10 +84,10 @@ func (k *Keys) deriveKeys() (err error) {
+ }
+ 
+ // HeaderProtection_ encrypt/decrypt firstByte and packetNumber in place.
+-func (k *Keys) HeaderProtection_(sample []byte, longHeader bool, firstByte *byte, potentialPacketNumber []byte) (packetNumber []byte, err error) {
++func (k *Keys) HeaderProtection_(sample []byte, longHeader bool, firstByte *byte, potentialPacketNumber []byte) (packetNumber []byte, pnLen int, err error) {
+ 	block, err := aes.NewCipher(k.headerProtectionKey)
+ 	if err != nil {
+-		return nil, err
++		return nil, 0, err
+ 	}
+ 	// Get mask.
+ 	mask := pool.Get(block.BlockSize())
+@@ -104,30 +104,35 @@ func (k *Keys) HeaderProtection_(sample []byte, longHeader bool, firstByte *byte
+ 		*firstByte ^= mask[0] & 0x1f
+ 	}
+ 	// The length of the Packet Number field is the value of this field plus one.
+-	packetNumberLength := int((*firstByte & 0b11) + 1)
+-	packetNumber = potentialPacketNumber[:packetNumberLength]
++	pnLen = int((*firstByte & 0b11) + 1)
++	packetNumber = potentialPacketNumber[:pnLen]
+ 
+ 	// Encrypt/decrypt packet number.
+ 	for i := range packetNumber {
+ 		packetNumber[i] ^= mask[1+i]
+ 	}
+-	return packetNumber, nil
++	return packetNumber, pnLen, nil
+ }
+ 
+-func (k *Keys) PayloadDecrypt(ciphertext []byte, packetNumber []byte, header []byte) (plaintext pool.PB, err error) {
++func (k *Keys) PayloadDecrypt(ciphertext []byte, pn uint64, header []byte) (plaintext pool.PB, err error) {
+ 	// https://datatracker.ietf.org/doc/html/rfc9001#name-initial-secrets
+ 
+ 	aead, err := k.newAead(k.key)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	// We only decrypt once, so we do not need to XOR it back.
+-	// https://github.com/quic-go/qtls-go1-20/blob/e132a0e6cb45e20ac0b705454849a11d09ba5a54/cipher_suites.go#L496
+-	for i := range packetNumber {
+-		k.iv[len(k.iv)-len(packetNumber)+i] ^= packetNumber[i]
+-	}
++
++	// XOR the full 64-bit PN into the IV.
++	nonce := pool.Get(len(k.iv))
++	defer pool.Put(nonce)
++	copy(nonce, k.iv)
++	
++	// RFC 9001: The nonce is formed by XORing the packet number with the IV.
++	// The packet number is left-padded with zeros to the size of the IV.
++	binary.BigEndian.PutUint64(nonce[len(nonce)-8:], binary.BigEndian.Uint64(nonce[len(nonce)-8:])^pn)
++
+ 	plaintext = pool.Get(len(ciphertext) - aead.Overhead())
+-	plaintext, err = aead.Open(plaintext[:0], k.iv, ciphertext, header)
++	plaintext, err = aead.Open(plaintext[:0], nonce, ciphertext, header)
+ 	if err != nil {
+ 		plaintext.Put()
+ 		return nil, err
+@@ -135,8 +140,8 @@ func (k *Keys) PayloadDecrypt(ciphertext []byte, packetNumber []byte, header []b
+ 	return plaintext, nil
+ }
+ 
+-func DecryptQuic_(header []byte, blockEnd int, destConnId []byte) (plaintext pool.PB, err error) {
+-	_version := binary.BigEndian.Uint32(header[1:])
++func DecryptQuic_(buf []byte, pnOffset int, blockEnd int, destConnId []byte) (plaintext pool.PB, err error) {
++	_version := binary.BigEndian.Uint32(buf[1:])
+ 	version, err := ParseVersion(_version)
+ 	if err != nil {
+ 		return nil, err
+@@ -146,21 +151,33 @@ func DecryptQuic_(header []byte, blockEnd int, destConnId []byte) (plaintext poo
+ 		return nil, err
+ 	}
+ 	defer keys.Close()
+-	if blockEnd-len(header) < SampleSize {
++
++	// RFC 9001: The sample is taken from the ciphertext, starting 4 bytes after the beginning of the PN.
++	// Since Initial packets use 1-4 byte PN, we must ensure we have enough data.
++	sampleOffset := pnOffset + MaxPacketNumberLength
++	if blockEnd-sampleOffset < SampleSize {
+ 		return nil, io.ErrUnexpectedEOF
+ 	}
+-	// Sample 16B
+-	sample := header[len(header) : len(header)+SampleSize]
++	sample := buf[sampleOffset : sampleOffset+SampleSize]
+ 
+ 	// Decrypt header flag and packet number.
+-	var packetNumber []byte
+-	if packetNumber, err = keys.HeaderProtection_(sample, true, &header[0], header[len(header)-MaxPacketNumberLength:]); err != nil {
++	// We pass a pointer to the first byte and the slice containing the protected PN.
++	var packetNumberBytes []byte
++	var pnLen int
++	if packetNumberBytes, pnLen, err = keys.HeaderProtection_(sample, true, &buf[0], buf[pnOffset:pnOffset+MaxPacketNumberLength]); err != nil {
+ 		return nil, err
+ 	}
+-	header = header[:len(header)-MaxPacketNumberLength+len(packetNumber)] // Correct header
+-	payload := header[len(header):blockEnd]                               // Correct payload
+ 
+-	plaintext, err = keys.PayloadDecrypt(payload, packetNumber, header)
++	// RFC 9001: The PN is recovered by combining the protected PN with the largest PN seen so far.
++	var pn uint64
++	for _, b := range packetNumberBytes {
++		pn = (pn << 8) | uint64(b)
++	}
++
++	header := buf[:pnOffset+pnLen] // Correct header (AAD)
++	payload := buf[pnOffset+pnLen : blockEnd] // Correct payload (Ciphertext)
++
++	plaintext, err = keys.PayloadDecrypt(payload, pn, header)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/component/sniffing/internal/quicutils/cipher_test.go b/component/sniffing/internal/quicutils/cipher_test.go
+index c65a88e..0413ed2 100644
+--- a/component/sniffing/internal/quicutils/cipher_test.go
++++ b/component/sniffing/internal/quicutils/cipher_test.go
+@@ -53,7 +53,7 @@ func TestKeys_HeaderProtection_(t *testing.T) {
+ 	sample, _ := hex.DecodeString("d1b1c98dd7689fb8ec11d242b123dc9b")
+ 	flag := byte(0xc3)
+ 	packetNumber, _ := hex.DecodeString("00000002")
+-	if packetNumber, err = keys.HeaderProtection_(sample, true, &flag, packetNumber); err != nil {
++	if packetNumber, _, err = keys.HeaderProtection_(sample, true, &flag, packetNumber); err != nil {
+ 		t.Fatal("HeaderProtection_", err)
+ 	}
+ 	if flag != 0xc0 {
+@@ -78,7 +78,7 @@ func TestKeys_PayloadDecrypt_(t *testing.T) {
+ 	sample := data[50 : 50+16]
+ 	flag := &header[0]
+ 	var packetNumber []byte
+-	if packetNumber, err = keys.HeaderProtection_(sample, true, flag, potentialPacketNumber); err != nil {
++	if packetNumber, _, err = keys.HeaderProtection_(sample, true, flag, potentialPacketNumber); err != nil {
+ 		t.Fatal("HeaderProtection_", err)
+ 	}
+ 	if *flag != 0b11000000 {
+@@ -89,9 +89,13 @@ func TestKeys_PayloadDecrypt_(t *testing.T) {
+ 	}
+ 	header = data[:len(header)-4+len(packetNumber)]
+ 	payload := data[len(header):]
+-	plaintext, err := keys.PayloadDecrypt(payload, packetNumber, header)
++	var pn uint64
++	for _, b := range packetNumber {
++		pn = (pn << 8) | uint64(b)
++	}
++	plaintext, err := keys.PayloadDecrypt(payload, pn, header)
+ 	if err != nil {
+-		t.Fatal("PayloadDecryptFromPool:", err)
++		t.Fatal("PayloadDecrypt:", err)
+ 	}
+ 	t.Log(hex.EncodeToString(plaintext))
+ }
+diff --git a/component/sniffing/internal/quicutils/relocation.go b/component/sniffing/internal/quicutils/relocation.go
+index 1fa2cb4..c2cfcea 100644
+--- a/component/sniffing/internal/quicutils/relocation.go
++++ b/component/sniffing/internal/quicutils/relocation.go
+@@ -31,11 +31,9 @@ type CryptoFrameOffset struct {
+ }
+ 
+ func ReassembleCryptos(offsets []*CryptoFrameOffset, newPayload []byte) (newOffsets []*CryptoFrameOffset, err error) {
+-	oldLen := len(offsets)
+ 	var frameSize int
+ 	var offset *CryptoFrameOffset
+-	var boundary int
+-	// Extract crypto frames.
++	// Extract crypto frames from the new packet.
+ 	for iNextFrame := 0; iNextFrame < len(newPayload); iNextFrame += frameSize {
+ 		offset, frameSize, err = ExtractCryptoFrameOffset(newPayload[iNextFrame:], iNextFrame)
+ 		if err != nil {
+@@ -45,35 +43,39 @@ func ReassembleCryptos(offsets []*CryptoFrameOffset, newPayload []byte) (newOffs
+ 			continue
+ 		}
+ 		offsets = append(offsets, offset)
+-		if offset.UpperAppOffset+len(offset.Data) > boundary {
+-			boundary = offset.UpperAppOffset + len(offset.Data)
+-		}
+ 	}
+-	// Sort the new part.
+-	newPart := offsets[oldLen:]
+-	sort.Slice(newPart, func(i, j int) bool {
+-		return newPart[i].UpperAppOffset < newPart[j].UpperAppOffset
++	
++	if len(offsets) == 0 {
++		return nil, nil
++	}
++
++	// Sort all collected frames by offset.
++	sort.Slice(offsets, func(i, j int) bool {
++		if offsets[i].UpperAppOffset != offsets[j].UpperAppOffset {
++			return offsets[i].UpperAppOffset < offsets[j].UpperAppOffset
++		}
++		return len(offsets[i].Data) > len(offsets[j].Data)
+ 	})
+ 
+-	// Insertion sort.
+-	for i := oldLen; i < len(offsets); i++ {
+-		item := offsets[i]
+-		j := i - 1
+-		for ; j >= 0; j-- {
+-			if item.UpperAppOffset < offsets[j].UpperAppOffset {
+-				offsets[j+1] = offsets[j]
+-			} else {
+-				if offsets[j+1] != item {
+-					offsets[j+1] = item
+-				}
+-				break
+-			}
++	// Merge/Truncate overlapping frames to create a contiguous or gapped non-overlapping sequence.
++	result := make([]*CryptoFrameOffset, 0, len(offsets))
++	var currentEnd int = 0
++	for _, f := range offsets {
++		fEnd := f.UpperAppOffset + len(f.Data)
++		if fEnd <= currentEnd {
++			continue // Fully redundant (contained in previous)
+ 		}
+-		if j < 0 {
+-			offsets[0] = item
++		if f.UpperAppOffset < currentEnd {
++			// Partial overlap: truncate the prefix of the new frame.
++			diff := currentEnd - f.UpperAppOffset
++			f.Data = f.Data[diff:]
++			f.UpperAppOffset = currentEnd
+ 		}
++		result = append(result, f)
++		currentEnd = f.UpperAppOffset + len(f.Data)
+ 	}
+-	return offsets, nil
++
++	return result, nil
+ }
+ 
+ func ExtractCryptoFrameOffset(remainder []byte, transportOffset int) (offset *CryptoFrameOffset, frameSize int, err error) {
+@@ -199,7 +201,7 @@ func (l *LinearLocator) Range(i, j int) ([]byte, error) {
+ 		n := copy(b[k:], l.baseData[i-l.baseStart:])
+ 		k += n
+ 		i += n
+-		if l.iOuter+1 >= len(l.o) || l.o[l.iOuter].UpperAppOffset+len(l.o[l.iOuter+1].Data) != l.o[l.iOuter].UpperAppOffset {
++		if l.iOuter+1 >= len(l.o) || l.o[l.iOuter+1].UpperAppOffset != l.baseEnd {
+ 			// Some crypto is missing.
+ 			return nil, ErrMissingCrypto
+ 		}
+diff --git a/component/sniffing/internal/quicutils/version.go b/component/sniffing/internal/quicutils/version.go
+index f161335..a291771 100644
+--- a/component/sniffing/internal/quicutils/version.go
++++ b/component/sniffing/internal/quicutils/version.go
+@@ -19,9 +19,12 @@ func ParseVersion(version uint32) (Version, error) {
+ 	switch version {
+ 	case 0x6b3343cf:
+ 		return Version_V2, nil
+-	case 1:
++	case 1, 0x51303530:
+ 		return Version_V1, nil
+ 	default:
++		if (version & 0x0f0f0f0f) == 0x0a0a0a0a {
++			return Version_V1, nil
++		}
+ 		if (version & 0xff000000) == 0xff000000 {
+ 			return Version_Draft, nil
+ 		}
+@@ -78,3 +81,12 @@ func (v Version) IvLabel() []byte {
+ 		panic("unsupported quic version")
+ 	}
+ }
++
++func (v Version) InitialSecretLabel() []byte {
++	switch v {
++	case Version_V2:
++		return []byte("quicv2 client in")
++	default:
++		return []byte("client in")
++	}
++}
+diff --git a/component/sniffing/quic.go b/component/sniffing/quic.go
+index f47ddde..6ea0ee0 100644
+--- a/component/sniffing/quic.go
++++ b/component/sniffing/quic.go
+@@ -30,12 +30,10 @@ const (
+ )
+ 
+ // IsLikelyQuicInitialPacket checks if the buffer appears to be a QUIC Initial packet.
+-// It validates the Long Header format, Initial packet type, and Fixed bit.
+-// Version is NOT strictly checked to maintain compatibility with:
+-//   - QUIC v1 (0x00000001)
+-//   - QUIC v2 (0x709a50c4)
+-//   - Draft versions (e.g., 0xff00001d)
++// It validates the Long Header format and Initial packet type.
+ //
++// Version and FixedBit are NOT strictly checked to maintain compatibility with
++// various QUIC implementations (e.g., Nginx, Cloudflare) and versions (v1, v2, drafts).
+ // This follows the principle of being liberal in what we accept for sniffing purposes.
+ func IsLikelyQuicInitialPacket(buf []byte) bool {
+ 	const minQuicInitialHeaderLen = 7
+@@ -44,19 +42,12 @@ func IsLikelyQuicInitialPacket(buf []byte) bool {
+ 	}
+ 	protectedFlag := buf[0]
+ 
+-	if ((protectedFlag >> QuicFlag_HeaderForm) & 0b11) != QuicFlag_HeaderForm_LongHeader {
++	if ((protectedFlag >> QuicFlag_HeaderForm) & 0b1) != QuicFlag_HeaderForm_LongHeader {
+ 		return false
+ 	}
+ 	if ((protectedFlag >> QuicFlag_LongPacketType) & 0b11) != QuicFlag_LongPacketType_Initial {
+ 		return false
+ 	}
+-	if ((protectedFlag >> QuicFlag_FixedBit) & 0b1) == 0 {
+-		return false
+-	}
+-
+-	// Note: Version check intentionally omitted to support all QUIC versions.
+-	// The header form, packet type, and fixed bit checks are sufficient for
+-	// identifying likely QUIC Initial packets for sniffing purposes.
+ 
+ 	return true
+ }
+@@ -93,8 +84,11 @@ func (s *Sniffer) SniffQuic() (d string, err error) {
+ 	s.quicNextRead = s.buf.Len()
+ 	sni, err := extractSniFromTls(quicutils.NewLinearLocator(s.quicCryptos))
+ 	if err != nil {
+-		s.needMore = true
+-		return "", ErrNotFound
++		if errors.Is(err, quicutils.ErrMissingCrypto) {
++			s.needMore = true
++			return "", ErrNeedMore
++		}
++		return "", ErrNotApplicable
+ 	}
+ 	return sni, nil
+ }
+@@ -111,7 +105,7 @@ func sniffQuicBlock(s *Sniffer, cryptos []*quicutils.CryptoFrameOffset, buf []by
+ 	// Long header: 4 bits masked
+ 	// High 4 bits are not protected, so we can access QuicFlag_HeaderForm and QuicFlag_LongPacketType without decryption.
+ 	protectedFlag := buf[0]
+-	if ((protectedFlag >> QuicFlag_HeaderForm) & 0b11) != QuicFlag_HeaderForm_LongHeader {
++	if ((protectedFlag >> QuicFlag_HeaderForm) & 0b1) != QuicFlag_HeaderForm_LongHeader {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+ 	if ((protectedFlag >> QuicFlag_LongPacketType) & 0b11) != QuicFlag_LongPacketType_Initial {
+@@ -128,48 +122,59 @@ func sniffQuicBlock(s *Sniffer, cryptos []*quicutils.CryptoFrameOffset, buf []by
+ 	destConnId := buf[dstConnIdPos : dstConnIdPos+destConnIdLength]
+ 
+ 	srcConnIdLength := int(buf[boundary-1])
+-	boundary += srcConnIdLength + quicutils.MaxVarintLen64 // The next fields may have quic.MaxVarintLen64 bytes length
++	boundary += srcConnIdLength
+ 	if len(buf) < boundary {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+-	tokenLength, n, err := quicutils.BigEndianUvarint(buf[boundary-quicutils.MaxVarintLen64:])
++	tokenLength, n, err := quicutils.BigEndianUvarint(buf[boundary:])
+ 	if err != nil {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+-	boundary = boundary - quicutils.MaxVarintLen64 + n      // Correct boundary.
+-	boundary += int(tokenLength) + quicutils.MaxVarintLen64 // Next fields may have quic.MaxVarintLen64 bytes length
++	boundary += n + int(tokenLength)
+ 	if len(buf) < boundary {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+ 	// https://datatracker.ietf.org/doc/html/rfc9000#name-variable-length-integer-enc
+-	length, n, err := quicutils.BigEndianUvarint(buf[boundary-quicutils.MaxVarintLen64:])
++	length, n, err := quicutils.BigEndianUvarint(buf[boundary:])
+ 	if err != nil {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+-	boundary = boundary - quicutils.MaxVarintLen64 + n // Correct boundary.
++	boundary += n
+ 	blockEnd := boundary + int(length)
+ 	if len(buf) < blockEnd {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+-	boundary += quicutils.MaxPacketNumberLength
++	boundary = blockEnd // For next packet in coalesced datagram.
++	pnOffset := boundary - int(length)
++	boundary = pnOffset + quicutils.MaxPacketNumberLength // For DecryptQuic_ header slicing consistency.
+ 	if len(buf) < boundary {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+-	header := buf[:boundary]
+ 	// Decrypt protected Packets.
+ 	// https://datatracker.ietf.org/doc/html/rfc9000#packet-protected
+ 
+ 	// This function will modify the packet in place, thus we should save the first byte and MaxPacketNumberLength
+ 	// and recover it later.
+-	firstByte := header[0]
++	firstByte := buf[0]
+ 	rawPacketNumber := pool.Get(quicutils.MaxPacketNumberLength)
+-	copy(rawPacketNumber, header[boundary-quicutils.MaxPacketNumberLength:])
++	copy(rawPacketNumber, buf[pnOffset:pnOffset+quicutils.MaxPacketNumberLength])
+ 	defer func() {
+-		header[0] = firstByte
+-		copy(header[boundary-quicutils.MaxPacketNumberLength:], rawPacketNumber)
++		buf[0] = firstByte
++		copy(buf[pnOffset:pnOffset+quicutils.MaxPacketNumberLength], rawPacketNumber)
+ 		pool.Put(rawPacketNumber)
+ 	}()
+-	plaintext, err := quicutils.DecryptQuic_(header, blockEnd, destConnId)
++
++	// Support Retry: use the original DCID from the first Initial packet as the salt.
++	if s.quicOriginalDcid == nil && tokenLength == 0 {
++		s.quicOriginalDcid = make([]byte, len(destConnId))
++		copy(s.quicOriginalDcid, destConnId)
++	}
++	decryptionDcid := destConnId
++	if s.quicOriginalDcid != nil {
++		decryptionDcid = s.quicOriginalDcid
++	}
++
++	plaintext, err := quicutils.DecryptQuic_(buf, pnOffset, blockEnd, decryptionDcid)
+ 	if err != nil {
+ 		return cryptos, nil, ErrNotApplicable
+ 	}
+diff --git a/component/sniffing/quic_test.go b/component/sniffing/quic_test.go
+index 331da10..1846b6f 100644
+--- a/component/sniffing/quic_test.go
++++ b/component/sniffing/quic_test.go
+@@ -83,8 +83,8 @@ func TestIsLikelyQuicInitialPacket(t *testing.T) {
+ 
+ 	mutated := append([]byte(nil), QuicStream2_1...)
+ 	mutated[0] &^= 1 << QuicFlag_FixedBit
+-	if IsLikelyQuicInitialPacket(mutated) {
+-		t.Fatal("packet with fixed bit cleared should not be recognized")
++	if !IsLikelyQuicInitialPacket(mutated) {
++		t.Fatal("packet with fixed bit cleared should be recognized (relaxed check)")
+ 	}
+ }
+ 
+@@ -160,11 +160,11 @@ func TestIsLikelyQuicInitialPacket_HeaderValidation(t *testing.T) {
+ 			shouldPass: false,
+ 		},
+ 		{
+-			name: "Fixed bit cleared should fail",
++			name: "Fixed bit cleared should pass (relaxed)",
+ 			setupBuf: func(buf []byte) {
+ 				buf[0] = 0x80 // Long Header + Initial but no Fixed bit
+ 			},
+-			shouldPass: false,
++			shouldPass: true,
+ 		},
+ 		{
+ 			name: "Non-Initial packet type should fail",
+diff --git a/component/sniffing/sniffer.go b/component/sniffing/sniffer.go
+index 05200b1..39d2615 100644
+--- a/component/sniffing/sniffer.go
++++ b/component/sniffing/sniffer.go
+@@ -38,11 +38,12 @@ type Sniffer struct {
+ 	deadline time.Time
+ 
+ 	// Packet
+-	data           [][]byte
+-	needMore       bool
+-	quicNextRead   int
+-	quicCryptos    []*quicutils.CryptoFrameOffset
+-	quicPlaintexts []pool.PB
++	data             [][]byte
++	needMore         bool
++	quicNextRead     int
++	quicCryptos      []*quicutils.CryptoFrameOffset
++	quicPlaintexts   []pool.PB
++	quicOriginalDcid []byte
+ }
+ 
+ func NewStreamSniffer(r io.Reader, timeout time.Duration) *Sniffer {
+diff --git a/component/sniffing/tls.go b/component/sniffing/tls.go
+index 9d0d353..9bc6b91 100644
+--- a/component/sniffing/tls.go
++++ b/component/sniffing/tls.go
+@@ -64,10 +64,7 @@ func extractSniFromTls(search quicutils.Locator) (sni string, err error) {
+ 	}
+ 
+ 	// Three bytes length.
+-	length2 := (int(b[1]) << 16) + (int(b[2]) << 8) + int(b[3])
+-	if search.Len() > length2+4 {
+-		return "", ErrNotApplicable
+-	}
++	// length2 := (int(b[1]) << 16) + (int(b[2]) << 8) + int(b[3])
+ 
+ 	if !bytes.Equal(b[4:], Version_Tls1_2) {
+ 		return "", ErrNotApplicable
+diff --git a/control/control_plane.go b/control/control_plane.go
+index 64e22d9..07adf64 100644
+--- a/control/control_plane.go
++++ b/control/control_plane.go
+@@ -144,13 +144,12 @@ func NewControlPlane(
+ 	global *config.Global,
+ 	dnsConfig *config.Dns,
+ 	externGeoDataDirs []string,
+-) (*ControlPlane, error) {
++) (plane *ControlPlane, err error) {
+ 	// TODO: Some users reported that enabling GSO on the client would affect the performance of watching YouTube, so we disabled it by default.
+ 	if _, ok := os.LookupEnv("QUIC_GO_DISABLE_GSO"); !ok {
+ 		os.Setenv("QUIC_GO_DISABLE_GSO", "1")
+ 	}
+ 
+-	var err error
+ 
+ 	kernelVersion, e := internal.KernelVersion()
+ 	if e != nil {
+@@ -264,9 +263,15 @@ func NewControlPlane(
+ 	)
+ 	defer func() {
+ 		if err != nil {
+-			// Flip back.
+-			core.Flip()
+-			_ = core.Close()
++			if plane != nil {
++				_ = plane.Close()
++			} else {
++				// Fallback cleanup if plane was not yet fully constructed.
++				for i := len(deferFuncs) - 1; i >= 0; i-- {
++					_ = deferFuncs[i]()
++				}
++				_ = core.Close()
++			}
+ 		}
+ 	}()
+ 
+@@ -447,7 +452,7 @@ func NewControlPlane(
+ 
+ 	// New control plane.
+ 	ctx, cancel := context.WithCancel(context.Background())
+-	plane := &ControlPlane{
++	plane = &ControlPlane{
+ 		log:               log,
+ 		core:              core,
+ 		deferFuncs:        deferFuncs,
+@@ -474,11 +479,6 @@ func NewControlPlane(
+ 		udpUnorderedRunner: newDefaultUdpUnorderedTaskRunner(ctx),
+ 	}
+ 	plane.startRealDomainNegJanitor()
+-	defer func() {
+-		if err != nil {
+-			cancel()
+-		}
+-	}()
+ 
+ 	/// DNS upstream.
+ 	dnsUpstream, err := dns.New(dnsConfig, &dns.NewOption{
+@@ -495,7 +495,7 @@ func NewControlPlane(
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	if plane.dnsController, err = NewDnsController(dnsUpstream, &DnsControllerOption{
++	plane.dnsController, err = NewDnsController(dnsUpstream, &DnsControllerOption{
+ 		Log: log,
+ 		// ConcurrencyLimit: use default (16384)
+ 		// Suitable for proxy scenarios with higher latency
+@@ -538,11 +538,44 @@ func NewControlPlane(
+ 		},
+ 		IpVersionPrefer: dnsConfig.IpVersionPrefer,
+ 		FixedDomainTtl:  fixedDomainTtl,
+-	}); err != nil {
++	})
++	if err != nil {
+ 		return nil, err
+ 	}
+ 	plane.deferFuncs = append(plane.deferFuncs, plane.dnsController.Close)
+ 
++	// On reload, clear the BPF domain routing map to ensure DNS configuration
++	// changes take effect immediately. The dnsCache parameter is preserved for
++	// dae-wing compatibility but not used for cache refresh.
++	// TODO: Implement selective cache refresh based on what changed in DNS config.
++	if _bpf != nil {
++		// Keep reload behavior aligned with main: clear domain_routing_map only.
++		// Connection-state maps are intentionally preserved to avoid affecting
++		// established flows during reload.
++		if err = clearReloadDomainRoutingMap(core.bpf); err != nil {
++			return nil, fmt.Errorf("clearReloadDomainRoutingMap: %w", err)
++		}
++	}
++
++	// Restore DNS cache from last control plane if available.
++	if dnsCache != nil {
++		count := 0
++		now := time.Now()
++		for k, v := range dnsCache {
++			if v != nil {
++				// Re-patch domain bitmap for new routing rules.
++				v.DomainBitmap = plane.routingMatcher.domainMatcher.MatchDomainBitmap(v.GetFqdn())
++				plane.dnsController.dnsCache.Store(k, v)
++				// Trigger async BPF update to populate the cleared domain_routing_map.
++				plane.dnsController.triggerBpfUpdateIfNeeded(v, now)
++				count++
++			}
++		}
++		if count > 0 {
++			log.Infof("Restored %d DNS cache entries from previous control plane", count)
++		}
++	}
++
+ 	// Create and start DNS listener if configured
+ 	if dnsConfig.Bind != "" {
+ 		plane.dnsListener, err = NewDNSListener(log, dnsConfig.Bind, plane)
+@@ -557,18 +590,6 @@ func NewControlPlane(
+ 			plane.deferFuncs = append(plane.deferFuncs, plane.dnsListener.Stop)
+ 		}
+ 	}
+-	// On reload, clear the BPF domain routing map to ensure DNS configuration
+-	// changes take effect immediately. The dnsCache parameter is preserved for
+-	// dae-wing compatibility but not used for cache refresh.
+-	// TODO: Implement selective cache refresh based on what changed in DNS config.
+-	if _bpf != nil {
+-		// Keep reload behavior aligned with main: clear domain_routing_map only.
+-		// Connection-state maps are intentionally preserved to avoid affecting
+-		// established flows during reload.
+-		if err = clearReloadDomainRoutingMap(core.bpf); err != nil {
+-			return nil, fmt.Errorf("clearReloadDomainRoutingMap: %w", err)
+-		}
+-	}
+ 
+ 	// Init immediately to avoid DNS leaking in the very beginning because param control_plane_dns_routing will
+ 	// be set in callback.
+@@ -1043,7 +1064,13 @@ func (c *ControlPlane) stopRealDomainNegJanitor() {
+ 			close(c.negJanitorStop)
+ 		}
+ 		if c.negJanitorDone != nil {
+-			<-c.negJanitorDone
++			timer := time.NewTimer(5 * time.Second)
++			defer timer.Stop()
++			select {
++			case <-c.negJanitorDone:
++			case <-timer.C:
++				c.log.Warn("stopRealDomainNegJanitor: timeout waiting for janitor to exit")
++			}
+ 		}
+ 	})
+ }
+diff --git a/control/control_plane_core.go b/control/control_plane_core.go
+index 1854577..30564a3 100644
+--- a/control/control_plane_core.go
++++ b/control/control_plane_core.go
+@@ -208,6 +208,8 @@ func (c *controlPlaneCore) delQdisc(ifname string) error {
+ 	}
+ 	if err := netlink.QdiscDel(qdisc); err != nil && !errors.Is(err, unix.ENOENT) {
+ 		return fmt.Errorf("cannot delete clsact qdisc: %w", err)
++	} else if errors.Is(err, unix.ENOENT) {
++		c.log.Debugf("delQdisc: clsact qdisc not found for %v (already gone)", ifname)
+ 	}
+ 	return nil
+ }
+@@ -769,6 +771,11 @@ func (c *controlPlaneCore) EjectBpf() *bpfObjects {
+ 		c.deferFuncs = c.deferFuncs[1:]
+ 	}
+ 	c.bpfEjected = true
++
++	// Stop link watcher immediately during交接 period to avoid race condition
++	// between old and new control planes reacting to link events (e.g. PPPoE flapping).
++	_ = c.ifmgr.Close()
++
+ 	return c.bpf
+ }
+ 
+diff --git a/control/dial.go b/control/dial.go
+index 6132477..67f681d 100644
+--- a/control/dial.go
++++ b/control/dial.go
+@@ -12,7 +12,7 @@ import (
+ 
+ 	"github.com/daeuniverse/dae/common"
+ 	"github.com/daeuniverse/dae/common/consts"
+-	"github.com/daeuniverse/dae/component/outbound"
++	ob "github.com/daeuniverse/dae/component/outbound"
+ 	"github.com/daeuniverse/dae/component/outbound/dialer"
+ 	"github.com/daeuniverse/outbound/netproxy"
+ )
+@@ -30,7 +30,7 @@ type proxyDialParam struct {
+ }
+ 
+ type proxyDialResult struct {
+-	Outbound             *outbound.DialerGroup
++	Outbound             *ob.DialerGroup
+ 	Dialer               *dialer.Dialer
+ 	DialTarget           string
+ 	Network              string
+@@ -112,6 +112,24 @@ func (c *ControlPlane) chooseProxyDialer(ctx context.Context, p *proxyDialParam)
+ 
+ 	strictIpVersion := dialIp
+ 	d, _, err := outbound.Select(selectionNetworkType, strictIpVersion)
++	if err != nil && p.Network == "udp" && err == ob.ErrNoAliveDialer {
++		// Fallback for UDP: if selection failed (probably due to health check fail),
++		// try the other IP version if strictIpVersion is not absolutely required by domain routing.
++		altVersion := consts.IpVersionStr_4
++		if selectionNetworkType.IpVersion == consts.IpVersionStr_4 {
++			altVersion = consts.IpVersionStr_6
++		}
++		altType := &dialer.NetworkType{
++			L4Proto:   selectionNetworkType.L4Proto,
++			IpVersion: altVersion,
++			IsDns:     false,
++		}
++		d, _, err = outbound.Select(altType, false)
++		if err == nil {
++			selectionNetworkType = altType
++		}
++	}
++
+ 	if err != nil {
+ 		return &proxyDialResult{
+ 				Outbound:             outbound,
+diff --git a/control/dns_cache.go b/control/dns_cache.go
+index aa848e1..2163484 100644
+--- a/control/dns_cache.go
++++ b/control/dns_cache.go
+@@ -95,6 +95,13 @@ func (c *DnsCache) GetPackedResponse() []byte {
+ 	return *ptr
+ }
+ 
++func (c *DnsCache) GetFqdn() string {
++	if len(c.Answer) > 0 {
++		return c.Answer[0].Header().Name
++	}
++	return ""
++}
++
+ func (c *DnsCache) MarkRouteBindingRefreshed(now time.Time) {
+ 	c.lastRouteSyncNano.Store(now.UnixNano())
+ }
+diff --git a/control/dns_control.go b/control/dns_control.go
+index 513e087..34fa5b1 100644
+--- a/control/dns_control.go
++++ b/control/dns_control.go
+@@ -251,8 +251,21 @@ func (c *DnsController) Close() error {
+ 			c.bpfUpdateClosed.Store(true)
+ 			// Signal worker to stop and drain remaining tasks
+ 			close(c.bpfUpdateStop)
+-			// Wait for worker to finish draining
+-			c.bpfUpdateWg.Wait()
++			// Wait for worker to finish draining (with safety timeout)
++			done := make(chan struct{})
++			go func() {
++				c.bpfUpdateWg.Wait()
++				close(done)
++			}()
++			timer := time.NewTimer(5 * time.Second)
++			defer timer.Stop()
++			select {
++			case <-done:
++			case <-timer.C:
++				if c.log != nil {
++					c.log.Warn("DnsController.Close: timeout waiting for bpfUpdateWg")
++				}
++			}
+ 			// Note: We intentionally do NOT close bpfUpdateCh here.
+ 			// Closing the channel while concurrent sends might be in progress
+ 			// would cause panics. Instead, the channel will be garbage collected
+@@ -263,10 +276,26 @@ func (c *DnsController) Close() error {
+ 			close(c.janitorStop)
+ 		}
+ 		if c.janitorDone != nil {
+-			<-c.janitorDone
++			timer := time.NewTimer(5 * time.Second)
++			defer timer.Stop()
++			select {
++			case <-c.janitorDone:
++			case <-timer.C:
++				if c.log != nil {
++					c.log.Warn("DnsController.Close: timeout waiting for janitorDone")
++				}
++			}
+ 		}
+ 		if c.evictorDone != nil {
+-			<-c.evictorDone
++			timer := time.NewTimer(5 * time.Second)
++			defer timer.Stop()
++			select {
++			case <-c.evictorDone:
++			case <-timer.C:
++				if c.log != nil {
++					c.log.Warn("DnsController.Close: timeout waiting for evictorDone")
++				}
++			}
+ 		}
+ 	})
+ 
+diff --git a/control/sysctl.go b/control/sysctl.go
+index 6881c95..66c7847 100644
+--- a/control/sysctl.go
++++ b/control/sysctl.go
+@@ -27,6 +27,12 @@ type SysctlManager struct {
+ }
+ 
+ func InitSysctlManager(log *logrus.Logger) (err error) {
++	if sysctl != nil {
++		sysctl.mux.Lock()
++		sysctl.log = log
++		sysctl.mux.Unlock()
++		return nil
++	}
+ 	sysctl, err = NewSysctlManager(log)
+ 	return err
+ }
+diff --git a/control/udp.go b/control/udp.go
+index 20e6f0e..2443365 100644
+--- a/control/udp.go
++++ b/control/udp.go
+@@ -106,7 +106,7 @@ func (c *ControlPlane) logNoAliveDialerLimited(
+ 		"to":                     dst.String(),
+ 		"sniffed":                domain,
+ 		"interval":               noAliveDialerLogInterval.String(),
+-	}).Warn("no alive dialer for UDP selection (rate-limited)")
++	}).Warn("no alive dialer for selection (rate-limited)")
+ }
+ 
+ type DialOption struct {
+@@ -239,7 +239,7 @@ func (c *ControlPlane) handlePkt(lConn *net.UDPConn, data []byte, src, pktDst, r
+ 			}
+ 			_ = DefaultUdpEndpointPool.Remove(ueKey, ue)
+ 			ueExists = false
+-		} else if ue.SniffedDomain != "" {
++		} else if (ue.SniffedDomain != "" || flowDecision.IsLikelyQuicData) {
+ 			// It is quic ...
+ 			// Fast path.
+ 			domain = ue.SniffedDomain
+@@ -338,13 +338,13 @@ func (c *ControlPlane) handlePkt(lConn *net.UDPConn, data []byte, src, pktDst, r
+ 				}
+ 			}
+ 			if sniffer.NeedMore() {
+-				sniffer.RecordSniffNoSni(now)
++				// We don't record No SNI streak for NeedMore because handshakes naturally span multiple packets.
+ 				sniffer.Mu.Unlock()
+ 				return nil
+ 			}
+-			if err != nil || domain == "" {
++			if (err != nil && !stderrors.Is(err, sniffing.ErrNeedMore)) || domain == "" {
+ 				sniffer.RecordSniffNoSni(now)
+-			} else {
++			} else if domain != "" {
+ 				sniffer.RecordSniffSuccess()
+ 			}
+ 			if err != nil {
+@@ -416,7 +416,7 @@ getNew:
+ 		return fmt.Errorf("touch max retry limit")
+ 	}
+ 
+-	if domain != "" {
++	if domain != "" || flowDecision.IsLikelyQuicData {
+ 		natTimeout = QuicNatTimeout
+ 	}
+ 
+@@ -490,18 +490,23 @@ getNew:
+ 
+ 	// If the udp endpoint has been not alive, remove it from pool and get a new one.
+ 	if !isNew && ue.Outbound.GetSelectionPolicy() != consts.DialerSelectionPolicy_Fixed && !ue.Dialer.MustGetAlive(networkType) {
+-
+-		if c.log.IsLevelEnabled(logrus.DebugLevel) {
+-			c.log.WithFields(logrus.Fields{
+-				"src":     RefineSourceToShow(realSrc, realDst.Addr()),
+-				"network": networkType.String(),
+-				"dialer":  ue.Dialer.Property().Name,
+-				"retry":   retry,
+-			}).Debugln("Old udp endpoint was not alive and removed.")
++		// Optimization: For QUIC/WebRTC, do not aggressively remove endpoint on hot path
++		// just because one health check failed. Let the idle timeout or explicit write error 
++		// handle it to prevent flapping. Only remove if this was a DNS-type endpoint which 
++		// is more sensitive to staleness.
++		if domain == "" {
++			if c.log.IsLevelEnabled(logrus.DebugLevel) {
++				c.log.WithFields(logrus.Fields{
++					"src":     RefineSourceToShow(realSrc, realDst.Addr()),
++					"network": networkType.String(),
++					"dialer":  ue.Dialer.Property().Name,
++					"retry":   retry,
++				}).Debugln("Old udp endpoint was not alive and removed.")
++			}
++			_ = DefaultUdpEndpointPool.Remove(ueKey, ue)
++			retry++
++			goto getNew
+ 		}
+-		_ = DefaultUdpEndpointPool.Remove(ueKey, ue)
+-		retry++
+-		goto getNew
+ 	}
+ 	if domain == "" {
+ 		// It is used for showing.
+diff --git a/control/udp_endpoint_pool.go b/control/udp_endpoint_pool.go
+index 0c8d7fd..48b8e8c 100644
+--- a/control/udp_endpoint_pool.go
++++ b/control/udp_endpoint_pool.go
+@@ -64,6 +64,8 @@ type UdpEndpoint struct {
+ 
+ 	dead atomic.Bool
+ 
++	replayAttackCount int
++
+ 	// poolRef and poolKey allow the read loop to self-remove from the pool the
+ 	// instant it detects death. This minimises the window during which a stale
+ 	// dead entry lurks in the pool and forces callers through the slower
+@@ -103,12 +105,18 @@ func (ue *UdpEndpoint) start() {
+ 	for {
+ 		n, from, err := ue.conn.ReadFrom(buf[:])
+ 		if err != nil {
++			if daerrors.IsReplayAttackError(err) && ue.replayAttackCount < 20 {
++				ue.replayAttackCount++
++				ue.logEndpointExit(fmt.Errorf("%w (hit %d/20)", err, ue.replayAttackCount), "read loop (ignored)")
++				continue
++			}
+ 			ue.dead.Store(true)
+ 			ue.expiresAtNano.Store(1)
+ 			ue.selfRemoveFromPool()
+ 			ue.logEndpointExit(err, "read loop")
+ 			break
+ 		}
++		ue.replayAttackCount = 0
+ 		ue.RefreshTtl()
+ 		if err = ue.handler(ue, buf[:n], from); err != nil {
+ 			ue.dead.Store(true)
+diff --git a/control/udp_flow.go b/control/udp_flow.go
+index 7ecaf7e..1e86546 100644
+--- a/control/udp_flow.go
++++ b/control/udp_flow.go
+@@ -45,14 +45,25 @@ type UdpFlowDecision struct {
+ 	Key               UdpFlowKey
+ 	HasSnifferSession bool
+ 	IsQuicInitial     bool
++	IsLikelyQuicData  bool
+ }
+ 
+ func ClassifyUdpFlow(src, dst netip.AddrPort, data []byte) UdpFlowDecision {
+ 	key := NewUdpFlowKey(src, dst)
++	isQuicInitial := sniffing.IsLikelyQuicInitialPacket(data)
++	
++	// Heuristic: If it's on a port that usually runs QUIC, treat it as part of a potential QUIC flow.
++	// This ensures Symmetric NAT and Ordered Ingress for the entire session from the first packet.
++	isLikelyQuicData := false
++	if dst.Port() == 443 || dst.Port() == 8443 || src.Port() == 443 || src.Port() == 8443 {
++		isLikelyQuicData = true
++	}
++	
+ 	return UdpFlowDecision{
+ 		Key:               key,
+ 		HasSnifferSession: DefaultPacketSnifferSessionMgr.Get(key.PacketSnifferKey()) != nil,
+-		IsQuicInitial:     sniffing.IsLikelyQuicInitialPacket(data),
++		IsQuicInitial:     isQuicInitial,
++		IsLikelyQuicData:  isLikelyQuicData,
+ 	}
+ }
+ 
+@@ -89,7 +100,7 @@ func (d UdpFlowDecision) EnsureSnifferSession() UdpFlowDecision {
+ }
+ 
+ func (d UdpFlowDecision) PreferSymmetricNat() bool {
+-	return d.IsQuicInitial
++	return d.IsQuicInitial || d.HasSnifferSession || d.IsLikelyQuicData
+ }
+ 
+ func (d UdpFlowDecision) ShouldAttemptSniff() bool {
+@@ -97,5 +108,5 @@ func (d UdpFlowDecision) ShouldAttemptSniff() bool {
+ }
+ 
+ func (d UdpFlowDecision) ShouldUseOrderedIngress() bool {
+-	return d.HasSnifferSession || d.IsQuicInitial
++	return d.HasSnifferSession || d.IsQuicInitial || d.IsLikelyQuicData
+ }

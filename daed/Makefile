@@ -111,7 +111,6 @@ define Build/Prepare
 		git clone --depth=1 -b main https://github.com/olicesx/quic-go.git $(PKG_BUILD_DIR)/../quic-go ; \
 		pushd $(PKG_BUILD_DIR) ; \
 		go mod edit -replace github.com/daeuniverse/quic-go=../quic-go ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/16a9302.patch | patch -p1 -N || true ; \
 		go get -u=patch ; \
 		go mod tidy ; \
 		popd ; \

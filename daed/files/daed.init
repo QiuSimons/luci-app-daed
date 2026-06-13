@@ -1,5 +1,4 @@
 #!/bin/sh /etc/rc.common
-# Copyright (C) 2023 Tianling Shen <cnsztl@immortalwrt.org>
 
 USE_PROCD=1
 START=99
@@ -7,7 +6,15 @@ START=99
 CONF="daed"
 PROG="/usr/bin/daed"
 LOG="/var/log/daed/daed.log"
-DAENETNS="/run/netns/daens"
+
+
+cleanup_netns() {
+	if [ -e "/run/netns/daens" ]; then
+		logger -t daed "Cleaning up residual netns 'daens'..."
+		ip netns del daens 2>/dev/null
+		rm -f /run/netns/daens 2>/dev/null
+	fi
+}
 
 start_service() {
 	config_load "$CONF"
@@ -15,6 +22,8 @@ start_service() {
 	local enabled
 	config_get_bool enabled "config" "enabled" "0"
 	[ "$enabled" -eq "1" ] || return 1
+
+	cleanup_netns
 
 	local listen_addr log_maxbackups log_maxsize
 	config_get listen_addr "config" "listen_addr" "0.0.0.0:2023"
@@ -32,15 +41,14 @@ start_service() {
 	procd_set_param limits core="unlimited"
 	procd_set_param limits nofile="1000000 1000000"
 	procd_set_param respawn
-	# procd_set_param stdout 1
 	procd_set_param stderr 1
 
 	procd_close_instance
 }
 
 stop_service() {
-	rm -f "$LOG"
-	[ -f "$DAENETNS" ] && umount "$DAENETNS"
+	procd_kill "$CONF" ""
+	cleanup_netns
 }
 
 service_triggers() {

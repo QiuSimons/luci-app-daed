@@ -162,7 +162,7 @@ jobs:
         continue-on-error: true
 
       - name: Cleanup Old Action Artifacts
-        uses: c-hive/gha-remove-artifacts@master
+        uses: c-hive/gha-remove-artifacts@main
         with:
           age: '3 days'
           skip-recent: 3
